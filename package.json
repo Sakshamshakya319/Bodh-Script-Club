@@ -1,0 +1,47 @@
+{
+  "name": "bodh-script-club",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"nodemon server.js\" --names \"VITE,API\" --prefix-colors \"cyan,green\"",
+    "start": "node server.js",
+    "build": "node ./node_modules/vite/bin/vite.js build",
+    "preview": "vite preview",
+    "vercel-build": "node ./node_modules/vite/bin/vite.js build",
+    "create-admin": "node scripts/createAdmin.js",
+    "seed-about": "node scripts/seedAbout.js",
+    "seed-events": "node scripts/seedEvents.js",
+    "seed-gallery": "node scripts/seedGallery.js",
+    "seed-members": "node scripts/seedMembers.js",
+    "seed-testimonials": "node scripts/seedTestimonials.js"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.22.0",
+    "gsap": "^3.12.5",
+    "lucide-react": "^0.344.0",
+    "axios": "^1.6.5",
+    "express": "^4.18.2",
+    "mongoose": "^8.0.3",
+    "bcrypt": "^5.1.1",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "xlsx": "^0.18.5",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.18",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1",
+    "vite": "^5.1.4",
+    "nodemon": "^3.0.2",
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": "20.x"
+  }
+}
