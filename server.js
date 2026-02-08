@@ -4,20 +4,73 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import authRoutes from './api/routes/auth.js';
-import eventRoutes from './api/routes/events.js';
-import memberRoutes from './api/routes/members.js';
-import submissionRoutes from './api/routes/submissions.js';
-import aboutRoutes from './api/routes/about.js';
-import galleryRoutes from './api/routes/gallery.js';
-import testimonialRoutes from './api/routes/testimonials.js';
+import compression from 'compression';
+import helmet from 'helmet';
+
+// Load environment variables first
+dotenv.config();
+
+// Validate critical environment variables
+const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET'];
+const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingEnvVars.length > 0) {
+  console.error('❌ CRITICAL: Missing required environment variables:', missingEnvVars);
+  console.error('🔧 Please set these variables in Vercel dashboard:');
+  missingEnvVars.forEach(varName => {
+    console.error(`   - ${varName}`);
+  });
+}
+
+// Import local development routes (only if they exist)
+// Using consolidated API handler - no need for individual route files
+
+// Initialize JWT service function
+async function initializeJWT() {
+  if (process.env.JWT_SECRET) {
+    try {
+      const { jwtService } = await import('./api/utils/jwt.js');
+      jwtService.initialize();
+      console.log('✅ JWT Service initialized');
+      return true;
+    } catch (error) {
+      console.error('❌ JWT Service initialization failed:', error.message);
+      return false;
+    }
+  } else {
+    console.warn('⚠️ JWT_SECRET not found - authentication will not work');
+    return false;
+  }
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-dotenv.config();
-
 const app = express();
+
+// Initialize JWT service
+initializeJWT();
+
+// Security middleware
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "https:", "blob:"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      connectSrc: ["'self'", "https:", "wss:"],
+      mediaSrc: ["'self'", "https:", "blob:"],
+      objectSrc: ["'none'"],
+      frameSrc: ["'none'"]
+    }
+  },
+  crossOriginEmbedderPolicy: false
+}));
+
+// Compression middleware
+app.use(compression());
 
 // CORS Configuration
 const corsOptions = {
@@ -25,7 +78,9 @@ const corsOptions = {
     const allowedOrigins = [
       'http://localhost:5173',
       'http://localhost:5000',
-      process.env.FRONTEND_URL
+      'http://localhost:3000',
+      process.env.FRONTEND_URL,
+      process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null
     ].filter(Boolean);
 
     // Allow requests with no origin (like mobile apps or curl requests)
@@ -45,41 +100,121 @@ const corsOptions = {
 
 // Middleware
 app.use(cors(corsOptions));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Request logging middleware
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-  next();
-});
+// Request logging middleware (only in development)
+if (process.env.NODE_ENV !== 'production') {
+  app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+    next();
+  });
+}
 
-// API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/events', eventRoutes);
-app.use('/api/members', memberRoutes);
-app.use('/api/submissions', submissionRoutes);
-app.use('/api/about', aboutRoutes);
-app.use('/api/gallery', galleryRoutes);
-app.use('/api/testimonials', testimonialRoutes);
+// API Routes - Use consolidated handler for ALL requests
+if (process.env.NODE_ENV !== 'production') {
+  // Import and use the consolidated API handler for all /api/* routes
+  app.all('/api/*', async (req, res) => {
+    try {
+      const { default: apiHandler } = await import('./api/index.js');
+      await apiHandler(req, res);
+    } catch (error) {
+      console.error('[API] Error:', error);
+      res.status(500).json({ 
+        message: 'API handler error', 
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal Server Error' 
+      });
+    }
+  });
+} else {
+  // In production, Vercel handles API routes via serverless functions
+  app.get('/api/*', (req, res) => {
+    res.status(404).json({ 
+      message: 'API routes are handled by Vercel serverless functions in production',
+      path: req.path
+    });
+  });
+}
 
-// Health check
-app.get('/api/health', (req, res) => {
+// Simple test endpoint that doesn't require environment variables
+app.get('/api/ping', (req, res) => {
   res.json({ 
-    status: 'OK', 
     message: 'Server is running',
-    environment: process.env.NODE_ENV,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    nodeVersion: process.version
   });
 });
 
-// Test endpoint to verify API is working
+// Environment check endpoint
+app.get('/api/env-check', (req, res) => {
+  const envStatus = {
+    message: 'Environment check',
+    timestamp: new Date().toISOString(),
+    nodeVersion: process.version,
+    platform: process.platform,
+    environment: process.env.NODE_ENV || 'not set',
+    
+    // Check critical environment variables (without exposing values)
+    envVars: {
+      MONGODB_URI: process.env.MONGODB_URI ? 'SET' : 'NOT SET',
+      JWT_SECRET: process.env.JWT_SECRET ? 'SET' : 'NOT SET',
+      JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET ? 'SET' : 'NOT SET',
+      SESSION_SECRET: process.env.SESSION_SECRET ? 'SET' : 'NOT SET',
+      PORT: process.env.PORT || 'not set',
+      BCRYPT_ROUNDS: process.env.BCRYPT_ROUNDS || 'not set'
+    },
+    
+    // Show any missing critical variables
+    missingCritical: requiredEnvVars.filter(varName => !process.env[varName])
+  };
+
+  // Return 500 if critical variables are missing
+  if (envStatus.missingCritical.length > 0) {
+    return res.status(500).json({
+      ...envStatus,
+      error: 'Missing critical environment variables',
+      action: 'Set these variables in Vercel dashboard'
+    });
+  }
+
+  res.json(envStatus);
+});
+
+// Legacy health check endpoints (for backward compatibility)
 app.get('/api/test', (req, res) => {
   res.json({ 
     message: 'API is working!',
     environment: process.env.NODE_ENV,
-    mongodb: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
+    mongodb: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Debug endpoint for Vercel deployment issues
+app.get('/api/debug', (req, res) => {
+  const envCheck = {
+    NODE_ENV: process.env.NODE_ENV || 'not set',
+    MONGODB_URI: process.env.MONGODB_URI ? 'set' : 'NOT SET',
+    JWT_SECRET: process.env.JWT_SECRET ? 'set' : 'NOT SET',
+    JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET ? 'set' : 'NOT SET',
+    PORT: process.env.PORT || 'not set'
+  };
+
+  res.json({
+    message: 'Debug information',
+    environment: envCheck,
+    mongodb: {
+      status: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
+      readyState: mongoose.connection.readyState,
+      host: mongoose.connection.host || 'not connected'
+    },
+    server: {
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      nodeVersion: process.version,
+      platform: process.platform
+    }
   });
 });
 
@@ -115,26 +250,34 @@ const connectDB = async () => {
 
   try {
     const db = await mongoose.connect(process.env.MONGODB_URI, {
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 10000,
       maxPoolSize: 10,
+      bufferCommands: false,
+      // Removed bufferMaxEntries as it's deprecated
     });
 
     isConnected = db.connections[0].readyState;
     console.log("✅ MongoDB connected");
   } catch (error) {
     console.error("❌ MongoDB Connection Error:", error);
-    // Throw error so the middleware knows connection failed
     throw error;
   }
 };
 
-// Connect to DB immediately (fire and forget for local, but useful for cold starts)
-connectDB().catch(err => console.error("Initial DB connection failed:", err.message));
+// Connect to DB immediately (but don't crash if it fails)
+if (process.env.MONGODB_URI) {
+  connectDB().catch(err => {
+    console.error("❌ Initial DB connection failed:", err.message);
+    console.warn("⚠️ Server will continue running but database features won't work");
+  });
+} else {
+  console.warn("⚠️ MONGODB_URI not set - database features will not work");
+}
 
 // Ensure DB connection for every API request
 app.use(async (req, res, next) => {
-  // Only check DB connection for API routes
-  if (req.path.startsWith('/api')) {
+  // Only check DB connection for API routes (except health checks)
+  if (req.path.startsWith('/api') && !req.path.startsWith('/api/health')) {
     if (!isConnected) {
       try {
         await connectDB();
@@ -150,6 +293,15 @@ app.use(async (req, res, next) => {
   next();
 });
 
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(500).json({
+    message: 'Internal Server Error',
+    error: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+  });
+});
+
 const PORT = process.env.PORT || 5000;
 
 // For Vercel serverless functions
@@ -161,5 +313,7 @@ if (process.env.NODE_ENV !== 'production') {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📍 API URL: http://localhost:${PORT}/api`);
     console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`📦 Node Version: ${process.version}`);
+    console.log(`🏥 Health Check: http://localhost:${PORT}/api/health`);
   });
 }

@@ -26,10 +26,11 @@ const Members = () => {
   const fetchMembers = async () => {
     try {
       const { data } = await membersAPI.getAll();
-      setMembers(data);
+      const list = Array.isArray(data) ? data : (data?.data ?? data?.members ?? []);
+      setMembers(list.length > 0 ? list : demoMembers);
     } catch (error) {
       console.error('Error fetching members:', error);
-      setMembers([]);
+      setMembers(demoMembers);
     } finally {
       setLoading(false);
     }

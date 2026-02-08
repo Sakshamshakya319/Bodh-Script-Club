@@ -25,9 +25,19 @@ const Home = () => {
   const fetchEvents = async () => {
     try {
       const { data } = await eventsAPI.getAll();
-      setEvents(data.filter(e => e.status === 'upcoming').slice(0, 4));
+      console.log('Home page - Events fetched:', data);
+      
+      // Ensure data is an array
+      const eventsArray = Array.isArray(data) ? data : [];
+      
+      // Filter upcoming events and limit to 4
+      const upcomingEvents = eventsArray.filter(e => e.status === 'upcoming').slice(0, 4);
+      console.log('Home page - Upcoming events:', upcomingEvents);
+      
+      setEvents(upcomingEvents);
     } catch (error) {
       console.error('Error fetching events:', error);
+      setEvents([]);
     }
   };
 
@@ -91,10 +101,10 @@ const Home = () => {
   ];
 
   const galleryImages = [
-    { id: 1, url: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=500' },
-    { id: 2, url: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=500' },
-    { id: 3, url: 'https://images.unsplash.com/photo-1531482615713-2afd69097998?w=500' },
-    { id: 4, url: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=500' },
+    { id: 1, url: 'https://i.ibb.co/fzWTpvhY/img2.jpg' },
+    { id: 2, url: 'https://i.ibb.co/pcgbbqW/img6.jpg' },
+    { id: 3, url: 'https://i.ibb.co/fV4kB7bK/img3.jpg' },
+    { id: 4, url: 'https://i.ibb.co/GfSHfcsy/img4.jpg' },
     { id: 5, url: 'https://images.unsplash.com/photo-1515378791036-0648a3ef77b2?w=500' },
   ];
 

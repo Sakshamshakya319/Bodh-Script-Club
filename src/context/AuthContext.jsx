@@ -51,7 +51,8 @@ export const AuthProvider = ({ children }) => {
   const login = async (credentials) => {
     try {
       const { data } = await authAPI.login(credentials);
-      localStorage.setItem('token', data.token);
+      // Store the access token (the API returns accessToken, not token)
+      localStorage.setItem('token', data.accessToken);
       setUser(data.user);
       console.log('Login successful:', data.user);
       return data;
@@ -64,7 +65,8 @@ export const AuthProvider = ({ children }) => {
   const signup = async (userData) => {
     try {
       const { data } = await authAPI.signup(userData);
-      localStorage.setItem('token', data.token);
+      // Store the access token (the API returns accessToken, not token)
+      localStorage.setItem('token', data.accessToken);
       setUser(data.user);
       console.log('Signup successful:', data.user);
       return data;
@@ -78,9 +80,8 @@ export const AuthProvider = ({ children }) => {
     console.log('Logging out...');
     localStorage.removeItem('token');
     setUser(null);
-    authAPI.logout().catch(() => {
-      // Ignore logout API errors
-    });
+    // Fire-and-forget; don't block. No /auth/logout on Vercel - ignore errors.
+    authAPI.logout().catch(() => {});
   };
 
   const value = {

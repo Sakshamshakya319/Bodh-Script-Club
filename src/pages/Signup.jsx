@@ -52,10 +52,16 @@ const Signup = () => {
     try {
       const { confirmPassword, ...signupData } = formData;
       await signup(signupData);
-      // Redirect to the page they came from or home
-      navigate(from, { state: { eventId } });
+      navigate(from, { state: { eventId }, replace: true });
     } catch (err) {
-      setError(err.response?.data?.message || 'Signup failed. Please try again.');
+      const data = err.response?.data;
+      const msg = data?.message || 'Signup failed. Please try again.';
+      const code = data?.error;
+      if (code === 'JWT_SECRET_MISSING' || code === 'MONGODB_URI_MISSING' || code === 'DB_CONNECTION_FAILED') {
+        setError(`${msg} Add MONGODB_URI and JWT_SECRET in Vercel → Project Settings → Environment Variables, then redeploy.`);
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }

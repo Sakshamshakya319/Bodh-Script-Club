@@ -73,16 +73,34 @@ const Gallery = () => {
     try {
       const params = selectedCategory !== 'all' ? { category: selectedCategory } : {};
       const { data } = await galleryAPI.getAll(params);
+      console.log('Gallery data received:', data);
       
-      // If we get data, use it. If array is empty, it means no galleries yet, which is valid.
-      // Only fallback to demo data if the request explicitly fails (catch block) 
-      // OR if you strictly want to show demo data when DB is empty (uncomment line below if desired)
-      // setGalleries(data.length > 0 ? data : demoGalleries);
+      const list = Array.isArray(data) ? data : (data?.data ?? data?.gallery ?? []);
+      console.log('Gallery list:', list);
       
-      setGalleries(data); 
+      // Transform data to match component structure
+      const transformedList = list.map(item => {
+        // If images is array of strings, convert to array of objects
+        const images = Array.isArray(item.images) 
+          ? item.images.map((img, idx) => {
+              if (typeof img === 'string') {
+                return { url: img, caption: '', order: idx };
+              }
+              return img;
+            })
+          : [];
+        
+        return {
+          ...item,
+          images,
+          coverImageIndex: 0 // Always use first image as cover
+        };
+      });
+      
+      console.log('Transformed gallery list:', transformedList);
+      setGalleries(transformedList.length > 0 ? transformedList : demoGalleries);
     } catch (error) {
       console.error('Error fetching gallery:', error);
-      // Fallback to demo data only on error so the page isn't broken
       setGalleries(demoGalleries);
     } finally {
       setLoading(false);
@@ -217,73 +235,82 @@ const Gallery = () => {
 
           {/* Gallery Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {galleries.map((gallery, idx) => {
-              const coverImage = gallery.images[gallery.coverImageIndex]?.url || gallery.images[0]?.url;
-              const imageCount = gallery.images?.length || 0;
-              
-              return (
-                <div
-                  key={gallery._id || idx}
-                  className="gallery-item group relative overflow-hidden rounded-2xl cursor-pointer"
-                  onClick={() => openGallery(gallery)}
-                >
-                  <div className="aspect-square relative">
-                    <LazyImage
-                      src={coverImage}
-                      alt={gallery.eventName}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                    />
-                    
-                    {/* Play Button Overlay */}
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-                      <div className="w-20 h-20 rounded-full bg-gradient-to-br from-neon-blue to-neon-purple flex items-center justify-center transform group-hover:scale-110 transition-transform duration-300">
-                        <Play size={32} className="text-white ml-1" />
-                      </div>
-                    </div>
-
-                    {/* Gradient Overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                      <div className="absolute bottom-0 left-0 right-0 p-6">
-                        <h3 className="text-xl font-heading font-bold mb-2 text-white">
-                          {gallery.eventName}
-                        </h3>
-                        <div className="flex items-center gap-4 text-sm text-gray-300">
-                          <span className="flex items-center gap-1">
-                            <Calendar size={14} />
-                            {new Date(gallery.eventDate).toLocaleDateString()}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <ImageIcon size={14} />
-                            {imageCount} photos
-                          </span>
+            {galleries.length > 0 ? (
+              galleries.map((gallery, idx) => {
+                const images = gallery.images || [];
+                const coverImage = images[gallery.coverImageIndex || 0]?.url || images[0]?.url || gallery.coverImage;
+                const imageCount = images.length;
+                
+                return (
+                  <div
+                    key={gallery._id || idx}
+                    className="gallery-item group relative overflow-hidden rounded-2xl cursor-pointer"
+                    onClick={() => openGallery(gallery)}
+                  >
+                    <div className="aspect-square relative">
+                      <LazyImage
+                        src={coverImage}
+                        alt={gallery.eventName}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                      />
+                      
+                      {/* Play Button Overlay */}
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-neon-blue to-neon-purple flex items-center justify-center transform group-hover:scale-110 transition-transform duration-300">
+                          <Play size={32} className="text-white ml-1" />
                         </div>
                       </div>
-                    </div>
 
-                    {/* Category Badge */}
-                    <div className="absolute top-4 right-4">
-                      <span className="px-3 py-1 glass-effect rounded-full text-xs font-mono text-neon-cyan">
-                        {gallery.category}
-                      </span>
-                    </div>
+                      {/* Gradient Overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                        <div className="absolute bottom-0 left-0 right-0 p-6">
+                          <h3 className="text-xl font-heading font-bold mb-2 text-white">
+                            {gallery.eventName}
+                          </h3>
+                          <div className="flex items-center gap-4 text-sm text-gray-300">
+                            <span className="flex items-center gap-1">
+                              <Calendar size={14} />
+                              {gallery.eventDate ? new Date(gallery.eventDate).toLocaleDateString() : 'No date'}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <ImageIcon size={14} />
+                              {imageCount} {imageCount === 1 ? 'photo' : 'photos'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
 
-                    {/* Image Count Badge */}
-                    <div className="absolute top-4 left-4">
-                      <span className="px-3 py-1 bg-black/70 backdrop-blur-sm rounded-full text-xs font-mono text-white flex items-center gap-1">
-                        <ImageIcon size={12} />
-                        {imageCount}
-                      </span>
+                      {/* Category Badge */}
+                      <div className="absolute top-4 right-4">
+                        <span className="px-3 py-1 glass-effect rounded-full text-xs font-mono text-neon-cyan">
+                          {gallery.category || 'event'}
+                        </span>
+                      </div>
+
+                      {/* Image Count Badge */}
+                      <div className="absolute top-4 left-4">
+                        <span className="px-3 py-1 bg-black/70 backdrop-blur-sm rounded-full text-xs font-mono text-white flex items-center gap-1">
+                          <ImageIcon size={12} />
+                          {imageCount}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            ) : (
+              <div className="col-span-full text-center py-20">
+                <ImageIcon size={64} className="mx-auto text-gray-600 mb-4" />
+                <p className="text-xl text-gray-400 font-body">No gallery items found</p>
+                <p className="text-sm text-gray-500 font-body mt-2">Create gallery items in the Admin Panel</p>
+              </div>
+            )}
           </div>
         </div>
       </section>
 
       {/* Image Player Modal */}
-      {selectedGallery && (
+      {selectedGallery && selectedGallery.images && selectedGallery.images.length > 0 && (
         <div
           className="fixed inset-0 z-[9997] bg-black/95 backdrop-blur-lg animate-fadeIn flex flex-col"
         >
@@ -334,7 +361,7 @@ const Gallery = () => {
             <div className="relative w-full max-w-6xl">
               {/* Main Image */}
               <LazyImage
-                src={selectedGallery.images[currentImageIndex]?.url}
+                src={selectedGallery.images[currentImageIndex]?.url || selectedGallery.images[currentImageIndex]}
                 alt={selectedGallery.images[currentImageIndex]?.caption || `Image ${currentImageIndex + 1}`}
                 className="w-full h-auto max-h-[60vh] md:max-h-[70vh] object-contain rounded-2xl mx-auto"
               />
@@ -372,26 +399,29 @@ const Gallery = () => {
           <div className="p-4 md:p-6 glass-effect">
             <div className="max-w-6xl mx-auto">
               <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                {selectedGallery.images.map((img, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => {
-                      setCurrentImageIndex(idx);
-                      setIsPlaying(false);
-                    }}
-                    className={`flex-shrink-0 w-16 h-16 md:w-20 md:h-20 rounded-lg overflow-hidden border-2 transition-all duration-300 ${
-                      idx === currentImageIndex
-                        ? 'border-neon-blue scale-110'
-                        : 'border-gray-700 hover:border-gray-500'
-                    }`}
-                  >
-                    <LazyImage
-                      src={img.url}
-                      alt={`Thumbnail ${idx + 1}`}
-                      className="w-full h-full object-cover"
-                    />
-                  </button>
-                ))}
+                {selectedGallery.images.map((img, idx) => {
+                  const imgUrl = typeof img === 'string' ? img : img.url;
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setCurrentImageIndex(idx);
+                        setIsPlaying(false);
+                      }}
+                      className={`flex-shrink-0 w-16 h-16 md:w-20 md:h-20 rounded-lg overflow-hidden border-2 transition-all duration-300 ${
+                        idx === currentImageIndex
+                          ? 'border-neon-blue scale-110'
+                          : 'border-gray-700 hover:border-gray-500'
+                      }`}
+                    >
+                      <LazyImage
+                        src={imgUrl}
+                        alt={`Thumbnail ${idx + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Keyboard Hints */}

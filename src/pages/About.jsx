@@ -17,8 +17,35 @@ const About = () => {
       console.log('Fetching about data...');
       const { data } = await aboutAPI.get();
       console.log('About data received:', data);
-      console.log('Technologies count:', data.technologies?.length);
-      setAboutData(data);
+      
+      // Transform API data to match component structure if needed
+      if (data && !data.whoWeAre) {
+        // API returns flat structure, transform it
+        const transformedData = {
+          whoWeAre: {
+            title: 'Who We Are',
+            description: data.description || demoData.whoWeAre.description
+          },
+          whatWeDo: {
+            title: 'What We Do',
+            description: 'We organize workshops, hackathons, coding competitions, and tech talks to help students enhance their technical skills and stay updated with the latest technologies.'
+          },
+          ourMission: {
+            title: 'Our Mission',
+            description: data.mission || demoData.ourMission.description
+          },
+          vision: {
+            title: 'Our Vision',
+            description: data.vision || demoData.vision.description,
+            points: demoData.vision.points
+          },
+          technologies: demoData.technologies,
+          milestones: demoData.milestones
+        };
+        setAboutData(transformedData);
+      } else {
+        setAboutData(data);
+      }
     } catch (error) {
       console.error('Error fetching about data:', error);
       // Set demo data as fallback
@@ -82,6 +109,16 @@ const About = () => {
 
   const data = aboutData || demoData;
 
+  // Ensure all required properties exist with fallbacks
+  const safeData = {
+    whoWeAre: data.whoWeAre || demoData.whoWeAre,
+    whatWeDo: data.whatWeDo || demoData.whatWeDo,
+    ourMission: data.ourMission || demoData.ourMission,
+    vision: data.vision || demoData.vision,
+    technologies: data.technologies || demoData.technologies,
+    milestones: data.milestones || demoData.milestones
+  };
+
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
@@ -108,10 +145,10 @@ const About = () => {
                 <Users size={32} className="text-white" />
               </div>
               <h2 className="text-3xl font-heading font-bold mb-4 gradient-text">
-                {data.whoWeAre.title}
+                {safeData.whoWeAre.title}
               </h2>
               <p className="text-gray-300 font-body leading-relaxed">
-                {data.whoWeAre.description}
+                {safeData.whoWeAre.description}
               </p>
             </div>
 
@@ -121,10 +158,10 @@ const About = () => {
                 <Rocket size={32} className="text-white" />
               </div>
               <h2 className="text-3xl font-heading font-bold mb-4 gradient-text">
-                {data.whatWeDo.title}
+                {safeData.whatWeDo.title}
               </h2>
               <p className="text-gray-300 font-body leading-relaxed">
-                {data.whatWeDo.description}
+                {safeData.whatWeDo.description}
               </p>
             </div>
 
@@ -134,10 +171,10 @@ const About = () => {
                 <Target size={32} className="text-white" />
               </div>
               <h2 className="text-3xl font-heading font-bold mb-4 gradient-text">
-                {data.ourMission.title}
+                {safeData.ourMission.title}
               </h2>
               <p className="text-gray-300 font-body leading-relaxed">
-                {data.ourMission.description}
+                {safeData.ourMission.description}
               </p>
             </div>
           </div>
@@ -156,17 +193,17 @@ const About = () => {
                   <Lightbulb size={40} className="text-white" />
                 </div>
                 <h2 className="text-5xl md:text-6xl font-heading font-bold gradient-text">
-                  {data.vision.title}
+                  {safeData.vision.title}
                 </h2>
               </div>
               
               <p className="text-xl text-gray-300 font-body leading-relaxed mb-8">
-                {data.vision.description}
+                {safeData.vision.description}
               </p>
 
-              {data.vision.points && data.vision.points.length > 0 && (
+              {safeData.vision.points && safeData.vision.points.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {data.vision.points.map((point, idx) => (
+                  {safeData.vision.points.map((point, idx) => (
                     <div key={idx} className="flex items-start gap-3 p-4 rounded-xl bg-black/30 border border-neon-blue/20">
                       <div className="w-2 h-2 rounded-full bg-neon-cyan mt-2 flex-shrink-0"></div>
                       <p className="text-gray-300 font-body">{point.text}</p>
@@ -180,7 +217,7 @@ const About = () => {
       </section>
 
       {/* Third Component - Technologies We Explore */}
-      {data.technologies && data.technologies.length > 0 && (
+      {safeData.technologies && safeData.technologies.length > 0 && (
         <section className="py-20 px-4">
           <div className="max-w-7xl mx-auto">
             <div className="text-center mb-16">
@@ -193,7 +230,7 @@ const About = () => {
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-              {data.technologies.map((tech, idx) => (
+              {safeData.technologies.map((tech, idx) => (
                 <div
                   key={idx}
                   className="glass-effect rounded-2xl p-6 border border-gray-800 card-hover group flex flex-col items-center justify-center gap-4 aspect-square"
@@ -295,7 +332,7 @@ const About = () => {
       </section>
 
       {/* Milestones Timeline */}
-      {data.milestones && data.milestones.length > 0 && (
+      {safeData.milestones && safeData.milestones.length > 0 && (
         <section className="py-20 px-4 bg-gradient-to-b from-transparent via-neon-purple/5 to-transparent">
           <div className="max-w-5xl mx-auto">
             <div className="text-center mb-16">
@@ -313,7 +350,7 @@ const About = () => {
 
               {/* Timeline Items */}
               <div className="space-y-12">
-                {data.milestones.sort((a, b) => a.order - b.order).map((milestone, idx) => (
+                {safeData.milestones.sort((a, b) => a.order - b.order).map((milestone, idx) => (
                   <div
                     key={idx}
                     className={`flex items-center gap-8 ${

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { UserPlus, Upload, CheckCircle, AlertCircle } from 'lucide-react';
+import { UserPlus, CheckCircle, AlertCircle } from 'lucide-react';
 import { gsap } from 'gsap';
 import Footer from '../components/Footer';
 import { submissionsAPI } from '../utils/api';
@@ -17,8 +17,6 @@ const JoinUs = () => {
     batch: '',
     github: '',
   });
-  const [photo, setPhoto] = useState(null);
-  const [photoPreview, setPhotoPreview] = useState(null);
   const [sameAsPhone, setSameAsPhone] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -45,19 +43,6 @@ const JoinUs = () => {
     }
   };
 
-  const handlePhotoChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      if (file.size > 1024 * 1024) {
-        setMessage({ type: 'error', text: 'Photo size must be less than 1MB' });
-        return;
-      }
-      setPhoto(file);
-      setPhotoPreview(URL.createObjectURL(file));
-      setMessage({ type: '', text: '' });
-    }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -66,36 +51,9 @@ const JoinUs = () => {
     try {
       console.log('Starting form submission...');
       console.log('Form data:', formData);
-      
-      // Check if registration number already exists
-      console.log('Checking registration number:', formData.registrationNumber);
-      const { data: checkData } = await submissionsAPI.checkRegistration(formData.registrationNumber);
-      console.log('Check result:', checkData);
-      
-      if (checkData.exists) {
-        setMessage({ 
-          type: 'error', 
-          text: 'Registration number already exists. Each student can only submit once.' 
-        });
-        setLoading(false);
-        return;
-      }
-
-      // Create FormData object
-      const submitData = new FormData();
-      Object.keys(formData).forEach(key => {
-        if (formData[key]) { // Only append non-empty values
-          submitData.append(key, formData[key]);
-        }
-      });
-      
-      if (photo) {
-        console.log('Appending photo:', photo.name, photo.size);
-        submitData.append('photo', photo);
-      }
 
       console.log('Submitting form data...');
-      const response = await submissionsAPI.create(submitData);
+      const response = await submissionsAPI.create(formData);
       console.log('Submission response:', response);
       
       setMessage({ 
@@ -116,8 +74,6 @@ const JoinUs = () => {
         batch: '',
         github: '',
       });
-      setPhoto(null);
-      setPhotoPreview(null);
       setSameAsPhone(false);
       
       // Scroll to success message
@@ -132,7 +88,19 @@ const JoinUs = () => {
       
       if (error.response) {
         // Server responded with error
-        errorMessage = error.response.data?.message || errorMessage;
+        const responseData = error.response.data;
+        
+        // Handle duplicate registration/email errors with detailed info
+        if (responseData?.error === 'DUPLICATE_REGISTRATION') {
+          const existing = responseData.existingSubmission;
+          errorMessage = `Registration number ${existing.registrationNumber} is already registered by ${existing.name}. Status: ${existing.status}. Submitted on: ${new Date(existing.submittedAt).toLocaleDateString()}`;
+        } else if (responseData?.error === 'DUPLICATE_EMAIL') {
+          const existing = responseData.existingSubmission;
+          errorMessage = `Email ${existing.email} is already registered. You have already submitted an application with registration number ${existing.registrationNumber}. Status: ${existing.status}.`;
+        } else {
+          errorMessage = responseData?.message || errorMessage;
+        }
+        
         console.error('Server error status:', error.response.status);
         console.error('Server error data:', error.response.data);
       } else if (error.request) {
@@ -382,49 +350,6 @@ const JoinUs = () => {
                   className="w-full px-4 py-3 bg-gray-900/50 border border-gray-700 rounded-xl text-white font-body placeholder:text-gray-500 focus:outline-none focus:border-neon-cyan focus:bg-gray-900/70 transition-all duration-300"
                   placeholder="https://github.com/username"
                 />
-              </div>
-
-              {/* Photo Upload */}
-              <div>
-                <label className="block text-sm font-body font-medium text-gray-300 mb-2">
-                  Upload Photo (Max 1MB)
-                </label>
-                <div className="flex items-center gap-4">
-                  <label className="flex-1 cursor-pointer group">
-                    <div className="w-full px-4 py-3 bg-gray-900/50 border border-gray-700 rounded-xl text-gray-400 font-body hover:border-neon-cyan hover:bg-gray-900/70 transition-all duration-300 flex items-center justify-center gap-2">
-                      <Upload size={20} className="group-hover:text-neon-cyan transition-colors" />
-                      <span className="group-hover:text-white transition-colors">{photo ? photo.name : 'Choose a photo'}</span>
-                    </div>
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/jpg,image/png,image/webp"
-                      onChange={handlePhotoChange}
-                      className="hidden"
-                    />
-                  </label>
-                  {photoPreview && (
-                    <div className="relative">
-                      <img
-                        src={photoPreview}
-                        alt="Preview"
-                        className="w-16 h-16 rounded-xl object-cover border-2 border-neon-cyan shadow-lg"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPhoto(null);
-                          setPhotoPreview(null);
-                        }}
-                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-white text-xs hover:bg-red-600 transition-colors"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <p className="text-xs text-gray-500 mt-2 font-body">
-                  Accepted formats: JPEG, JPG, PNG, WEBP (Max size: 1MB)
-                </p>
               </div>
 
               {/* Submit Button */}

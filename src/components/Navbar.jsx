@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X, LogOut, User, Calendar, ChevronDown } from 'lucide-react';
 import { gsap } from 'gsap';
 import { useAuth } from '../context/AuthContext';
@@ -9,6 +9,7 @@ const Navbar = () => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, logout, loading } = useAuth();
 
   useEffect(() => {
@@ -55,6 +56,7 @@ const Navbar = () => {
     logout();
     setShowDropdown(false);
     setIsOpen(false);
+    navigate('/', { replace: true });
   };
 
   return (

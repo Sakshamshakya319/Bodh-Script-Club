@@ -67,7 +67,7 @@ const Events = () => {
   };
 
   const upcomingEvents = Array.isArray(events) ? events.filter(e => e.status === 'upcoming') : [];
-  const previousEvents = Array.isArray(events) ? events.filter(e => e.status === 'previous') : [];
+  const previousEvents = Array.isArray(events) ? events.filter(e => e.status === 'completed') : [];
 
   const handleRegisterClick = (event) => {
     if (!isAuthenticated) {
@@ -237,19 +237,6 @@ const Events = () => {
           </div>
         </section>
       )}
-      {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-radial from-neon-blue/10 via-transparent to-transparent"></div>
-        
-        <div className="max-w-7xl mx-auto text-center relative z-10">
-          <h1 className="text-6xl md:text-8xl font-heading font-bold mb-6 gradient-text animate-float">
-            Events
-          </h1>
-          <p className="text-xl md:text-2xl font-body text-gray-400 max-w-3xl mx-auto">
-            Join us for exciting workshops, hackathons, and tech talks
-          </p>
-        </div>
-      </section>
 
       {/* Upcoming Events */}
       {upcomingEvents.length > 0 && (

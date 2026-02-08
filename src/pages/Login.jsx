@@ -36,17 +36,24 @@ const Login = () => {
     try {
       const response = await login(formData);
       console.log('Login response:', response);
-      
-      // Check if user is admin
-      if (response.user.role === 'admin' || response.user.isAdmin) {
+
+      const user = response?.user;
+      if (user && (user.role === 'admin' || user.isAdmin)) {
         console.log('Admin user detected, redirecting to dashboard...');
-        navigate('/admin');
+        navigate('/admin', { replace: true });
       } else {
-        // Regular user - redirect to where they came from or home
-        navigate(from, { state: { eventId } });
+        navigate(from, { state: { eventId }, replace: true });
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
+      const data = err.response?.data;
+      const msg = data?.message || 'Login failed. Please check your credentials.';
+      const code = data?.error;
+      // Show actionable hint for server config errors (Vercel env vars)
+      if (code === 'JWT_SECRET_MISSING' || code === 'MONGODB_URI_MISSING' || code === 'DB_CONNECTION_FAILED') {
+        setError(`${msg} If you just deployed, add MONGODB_URI and JWT_SECRET in Vercel → Project Settings → Environment Variables, then redeploy.`);
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }

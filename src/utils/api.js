@@ -55,10 +55,10 @@ api.interceptors.response.use(
       data: error.response?.data
     });
     
-    // If token is invalid or expired, redirect to login
-    if (error.response?.status === 401 || error.response?.status === 403) {
+    // If token is invalid or expired, redirect to login (but not for logout request)
+    const isLogoutRequest = error.config?.url?.includes?.('logout');
+    if (!isLogoutRequest && (error.response?.status === 401 || error.response?.status === 403)) {
       const currentPath = window.location.pathname;
-      // Don't redirect if already on login/signup pages
       if (currentPath !== '/login' && currentPath !== '/signup') {
         console.log('Token expired or invalid, redirecting to login...');
         localStorage.removeItem('token');
@@ -101,12 +101,8 @@ export const membersAPI = {
 
 // Submissions API
 export const submissionsAPI = {
-  create: (data) => api.post('/submissions', data, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  }),
-  checkRegistration: (registrationNumber) => api.get(`/submissions/check/${registrationNumber}`),
+  create: (data) => api.post('/submissions', data),
+  checkRegistration: (registrationNumber) => api.get(`/submissions/check/${encodeURIComponent(registrationNumber)}`),
   getAll: () => api.get('/submissions'),
   export: () => api.get('/submissions/export', { responseType: 'blob' }),
   updateStatus: (id, status) => api.put(`/submissions/${id}`, { status }),

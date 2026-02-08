@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { gsap } from 'gsap';
 import { MessageSquare, Star, CheckCircle, Send } from 'lucide-react';
 import Footer from '../components/Footer';
-import axios from 'axios';
+import { testimonialsAPI } from '../utils/api';
 
 const Feedback = () => {
   const [formData, setFormData] = useState({
     name: '',
+    email: '',
     role: '',
     message: '',
     rating: 5,
@@ -31,12 +32,12 @@ const Feedback = () => {
     setLoading(true);
 
     try {
-      await axios.post('http://localhost:5000/api/testimonials/submit', formData);
+      await testimonialsAPI.submit(formData);
       setSubmitted(true);
       
       setTimeout(() => {
         setSubmitted(false);
-        setFormData({ name: '', role: '', message: '', rating: 5 });
+        setFormData({ name: '', email: '', role: '', message: '', rating: 5 });
       }, 5000);
     } catch (error) {
       console.error('Error submitting feedback:', error);
@@ -90,6 +91,22 @@ const Feedback = () => {
                     required
                     className="w-full px-4 py-3 bg-black/50 border border-gray-700 rounded-lg focus:border-neon-blue focus:outline-none transition font-body text-white"
                     placeholder="Enter your full name"
+                  />
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className="block text-sm font-heading font-semibold mb-2 text-neon-blue">
+                    Your Email *
+                  </label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    required
+                    className="w-full px-4 py-3 bg-black/50 border border-gray-700 rounded-lg focus:border-neon-blue focus:outline-none transition font-body text-white"
+                    placeholder="Enter your email address"
                   />
                 </div>
 

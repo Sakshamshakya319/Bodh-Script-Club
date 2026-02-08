@@ -26,11 +26,16 @@ const MyRegistrations = () => {
       console.log('Fetching my registrations...');
       const { data } = await eventsAPI.getMyRegistrations();
       console.log('Registrations received:', data);
-      setRegistrations(data);
+      // API may return array directly or { registrations: [] } or { data: [] } - always normalize to array
+      const list = Array.isArray(data)
+        ? data
+        : (Array.isArray(data?.registrations) ? data.registrations : Array.isArray(data?.data) ? data.data : []);
+      setRegistrations(list);
     } catch (err) {
       console.error('Error fetching registrations:', err);
       const errorMsg = err.response?.data?.message || err.message || 'Failed to load registrations';
       setError(errorMsg);
+      setRegistrations([]);
     } finally {
       setLoading(false);
     }
@@ -42,12 +47,12 @@ const MyRegistrations = () => {
     return date > now ? 'upcoming' : 'completed';
   };
 
-  const upcomingRegistrations = registrations.filter(reg => 
-    reg.event && getEventStatus(reg.event.date) === 'upcoming'
+  const safeRegistrations = Array.isArray(registrations) ? registrations : [];
+  const upcomingRegistrations = safeRegistrations.filter(reg => 
+    reg && reg.event && getEventStatus(reg.event.date) === 'upcoming'
   );
-  
-  const completedRegistrations = registrations.filter(reg => 
-    reg.event && getEventStatus(reg.event.date) === 'completed'
+  const completedRegistrations = safeRegistrations.filter(reg => 
+    reg && reg.event && getEventStatus(reg.event.date) === 'completed'
   );
 
   if (loading) {
@@ -88,7 +93,7 @@ const MyRegistrations = () => {
       )}
 
       {/* No Registrations */}
-      {!loading && registrations.length === 0 && (
+      {!loading && !error && safeRegistrations.length === 0 && (
         <section className="py-20 px-4">
           <div className="max-w-2xl mx-auto text-center">
             <div className="w-24 h-24 rounded-full bg-gradient-to-br from-neon-blue/20 to-neon-purple/20 flex items-center justify-center mx-auto mb-6">
@@ -265,7 +270,7 @@ const RegistrationCard = ({ registration, status }) => {
         </div>
 
         {/* Tags */}
-        {event.tags && event.tags.length > 0 && (
+        {Array.isArray(event.tags) && event.tags.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-4">
             {event.tags.slice(0, 3).map((tag, idx) => (
               <span 
