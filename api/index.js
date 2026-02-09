@@ -9,6 +9,7 @@ import Gallery from '../models/GalleryModel.js';
 import Member from '../models/MemberModel.js';
 import Submission from '../models/SubmissionModel.js';
 import Testimonial from '../models/TestimonialModel.js';
+import Payment from '../models/PaymentModel.js';
 
 import jwt from 'jsonwebtoken';
 
@@ -792,25 +793,64 @@ const handlers = {
       const decoded = verifyToken(req);
       const { id } = req.params;
 
+      console.log(`📋 Fetching registrations for event: ${id}`);
+
       // Check if user is admin
       if (decoded.role !== 'admin' && !decoded.isAdmin) {
         return res.status(403).json({ message: 'Access denied' });
       }
 
+      // Fetch registrations with lean() for better performance
       const registrations = await EventRegistration.find({ event: id })
-        .populate('user', 'name email')
-        .populate('payment')
+        .populate({
+          path: 'user',
+          select: 'name email',
+          options: { strictPopulate: false }
+        })
+        .populate({
+          path: 'payment',
+          select: 'orderId paymentId amount status',
+          options: { strictPopulate: false }
+        })
+        .lean()
         .sort({ registeredAt: -1 });
+
+      console.log(`✅ Found ${registrations.length} registrations`);
+
+      // Transform data to ensure all fields are present
+      const transformedRegistrations = registrations.map(reg => ({
+        _id: reg._id,
+        name: reg.name || 'N/A',
+        registrationNo: reg.registrationNo || 'N/A',
+        phoneNumber: reg.phoneNumber || 'N/A',
+        whatsappNumber: reg.whatsappNumber || reg.phoneNumber || 'N/A',
+        course: reg.course || 'N/A',
+        section: reg.section || 'N/A',
+        year: reg.year || 'N/A',
+        department: reg.department || 'N/A',
+        paymentStatus: reg.paymentStatus || 'free',
+        registeredAt: reg.registeredAt,
+        user: reg.user || null,
+        payment: reg.payment ? {
+          _id: reg.payment._id,
+          orderId: reg.payment.orderId || 'N/A',
+          paymentId: reg.payment.paymentId || 'N/A',
+          amount: reg.payment.amount || 0,
+          status: reg.payment.status || 'pending'
+        } : null
+      }));
 
       res.status(200).json({
         success: true,
-        registrations
+        count: transformedRegistrations.length,
+        registrations: transformedRegistrations
       });
     } catch (error) {
-      console.error('Error fetching registrations:', error);
+      console.error('❌ Error fetching registrations:', error);
       res.status(500).json({
         message: 'Failed to fetch registrations',
-        error: error.message
+        error: error.message,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   },
@@ -834,14 +874,23 @@ const handlers = {
       }
 
       const registrations = await EventRegistration.find({ event: id })
-        .populate('user', 'name email')
-        .populate('payment')
+        .populate({
+          path: 'user',
+          select: 'name email',
+          options: { strictPopulate: false }
+        })
+        .populate({
+          path: 'payment',
+          select: 'orderId paymentId amount status',
+          options: { strictPopulate: false }
+        })
+        .lean()
         .sort({ registeredAt: -1 });
 
       console.log(`Exporting ${registrations.length} registrations for event: ${event.title}`);
 
-      // Create CSV header
-      const csvHeader = 'Registration No,Name,Phone Number,Course,Section,Year,Department,Payment Status,Registered At\n';
+      // Create CSV header with payment info
+      const csvHeader = 'Registration No,Name,Phone Number,WhatsApp,Course,Section,Year,Department,Payment Status,Amount,Order ID,Payment ID,Registered At\n';
 
       // Create CSV rows
       const csvRows = registrations.map(reg => {
@@ -856,14 +905,18 @@ const handlers = {
         };
 
         return [
-          escapeCSV(reg.registrationNo || ''),
-          escapeCSV(reg.name || ''),
-          escapeCSV(reg.phoneNumber || ''),
-          escapeCSV(reg.course || ''),
-          escapeCSV(reg.section || ''),
-          escapeCSV(reg.year || ''),
-          escapeCSV(reg.department || ''),
+          escapeCSV(reg.registrationNo || 'N/A'),
+          escapeCSV(reg.name || 'N/A'),
+          escapeCSV(reg.phoneNumber || 'N/A'),
+          escapeCSV(reg.whatsappNumber || reg.phoneNumber || 'N/A'),
+          escapeCSV(reg.course || 'N/A'),
+          escapeCSV(reg.section || 'N/A'),
+          escapeCSV(reg.year || 'N/A'),
+          escapeCSV(reg.department || 'N/A'),
           escapeCSV(reg.paymentStatus || 'free'),
+          escapeCSV(reg.payment?.amount ? `₹${reg.payment.amount}` : 'Free'),
+          escapeCSV(reg.payment?.orderId || 'N/A'),
+          escapeCSV(reg.payment?.paymentId || 'N/A'),
           escapeCSV(reg.registeredAt ? new Date(reg.registeredAt).toLocaleString('en-US', {
             year: 'numeric',
             month: '2-digit',
@@ -872,7 +925,7 @@ const handlers = {
             minute: '2-digit',
             second: '2-digit',
             hour12: true
-          }) : '')
+          }) : 'N/A')
         ].join(',');
       }).join('\n');
 
@@ -927,20 +980,66 @@ const handlers = {
     try {
       const decoded = verifyToken(req);
 
+      console.log(`📋 Fetching registrations for user: ${decoded.userId}`);
+
       const registrations = await EventRegistration.find({ user: decoded.userId })
-        .populate('event')
-        .populate('payment')
+        .populate({
+          path: 'event',
+          select: 'title date location image price isPaid',
+          options: { strictPopulate: false }
+        })
+        .populate({
+          path: 'payment',
+          select: 'orderId paymentId amount status',
+          options: { strictPopulate: false }
+        })
+        .lean()
         .sort({ registeredAt: -1 });
+
+      console.log(`✅ Found ${registrations.length} registrations`);
+
+      // Transform data to ensure all fields are present
+      const transformedRegistrations = registrations.map(reg => ({
+        _id: reg._id,
+        name: reg.name || 'N/A',
+        registrationNo: reg.registrationNo || 'N/A',
+        phoneNumber: reg.phoneNumber || 'N/A',
+        whatsappNumber: reg.whatsappNumber || reg.phoneNumber || 'N/A',
+        course: reg.course || 'N/A',
+        section: reg.section || 'N/A',
+        year: reg.year || 'N/A',
+        department: reg.department || 'N/A',
+        paymentStatus: reg.paymentStatus || 'free',
+        registeredAt: reg.registeredAt,
+        event: reg.event ? {
+          _id: reg.event._id,
+          title: reg.event.title || 'Event',
+          date: reg.event.date,
+          location: reg.event.location || 'TBA',
+          image: reg.event.image,
+          price: reg.event.price || 0,
+          isPaid: reg.event.isPaid || false
+        } : { title: 'Unknown Event' },
+        payment: reg.payment ? {
+          _id: reg.payment._id,
+          orderId: reg.payment.orderId || 'N/A',
+          paymentId: reg.payment.paymentId || 'N/A',
+          amount: reg.payment.amount || 0,
+          status: reg.payment.status || 'pending'
+        } : null
+      }));
 
       res.status(200).json({
         success: true,
-        registrations
+        count: transformedRegistrations.length,
+        registrations: transformedRegistrations
       });
     } catch (error) {
-      console.error('Error fetching user registrations:', error);
+      console.error('❌ Error fetching user registrations:', error);
       res.status(500).json({
         message: 'Failed to fetch registrations',
-        error: error.message
+        error: error.message,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   },

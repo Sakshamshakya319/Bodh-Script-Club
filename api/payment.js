@@ -244,20 +244,60 @@ const handlers = {
     try {
       const decoded = verifyToken(req);
       
+      console.log(`📋 Fetching payment history for user: ${decoded.userId}`);
+
       const payments = await Payment.find({ user: decoded.userId })
-        .populate('event', 'title date location image')
-        .populate('registration')
+        .populate({
+          path: 'event',
+          select: 'title date location image price',
+          options: { strictPopulate: false }
+        })
+        .populate({
+          path: 'registration',
+          select: 'registrationNo name phoneNumber',
+          options: { strictPopulate: false }
+        })
+        .lean()
         .sort({ createdAt: -1 });
+
+      console.log(`✅ Found ${payments.length} payments`);
+
+      // Transform data to ensure all fields are present
+      const transformedPayments = payments.map(payment => ({
+        _id: payment._id,
+        orderId: payment.orderId || 'N/A',
+        paymentId: payment.paymentId || 'Pending',
+        amount: payment.amount || 0,
+        currency: payment.currency || 'INR',
+        status: payment.status || 'pending',
+        userName: payment.userName || 'N/A',
+        userEmail: payment.userEmail || 'N/A',
+        registrationNo: payment.registrationNo || 'N/A',
+        phoneNumber: payment.phoneNumber || 'N/A',
+        createdAt: payment.createdAt,
+        paidAt: payment.paidAt,
+        event: payment.event ? {
+          _id: payment.event._id,
+          title: payment.event.title || 'Event',
+          date: payment.event.date,
+          location: payment.event.location || 'TBA',
+          image: payment.event.image,
+          price: payment.event.price || 0
+        } : null,
+        registration: payment.registration || null
+      }));
 
       res.status(200).json({
         success: true,
-        payments
+        count: transformedPayments.length,
+        payments: transformedPayments
       });
     } catch (error) {
-      console.error('Error fetching payment history:', error);
+      console.error('❌ Error fetching payment history:', error);
       res.status(500).json({ 
         message: 'Failed to fetch payment history', 
-        error: error.message 
+        error: error.message,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   },
@@ -274,21 +314,65 @@ const handlers = {
         return res.status(403).json({ message: 'Access denied' });
       }
 
+      console.log('📋 Fetching all payments (Admin)');
+
       const payments = await Payment.find()
-        .populate('event', 'title date location')
-        .populate('user', 'name email')
-        .populate('registration')
+        .populate({
+          path: 'event',
+          select: 'title date location price',
+          options: { strictPopulate: false }
+        })
+        .populate({
+          path: 'user',
+          select: 'name email',
+          options: { strictPopulate: false }
+        })
+        .populate({
+          path: 'registration',
+          select: 'registrationNo phoneNumber',
+          options: { strictPopulate: false }
+        })
+        .lean()
         .sort({ createdAt: -1 });
+
+      console.log(`✅ Found ${payments.length} payments`);
+
+      // Transform data to ensure all fields are present
+      const transformedPayments = payments.map(payment => ({
+        _id: payment._id,
+        orderId: payment.orderId || 'N/A',
+        paymentId: payment.paymentId || 'Pending',
+        amount: payment.amount || 0,
+        currency: payment.currency || 'INR',
+        status: payment.status || 'pending',
+        userName: payment.userName || (payment.user?.name) || 'N/A',
+        userEmail: payment.userEmail || (payment.user?.email) || 'N/A',
+        registrationNo: payment.registrationNo || (payment.registration?.registrationNo) || 'N/A',
+        phoneNumber: payment.phoneNumber || (payment.registration?.phoneNumber) || 'N/A',
+        createdAt: payment.createdAt,
+        paidAt: payment.paidAt,
+        event: payment.event ? {
+          _id: payment.event._id,
+          title: payment.event.title || 'Event',
+          date: payment.event.date,
+          location: payment.event.location || 'TBA',
+          price: payment.event.price || 0
+        } : { title: 'Unknown Event' },
+        user: payment.user || null,
+        registration: payment.registration || null
+      }));
 
       res.status(200).json({
         success: true,
-        payments
+        count: transformedPayments.length,
+        payments: transformedPayments
       });
     } catch (error) {
-      console.error('Error fetching all payments:', error);
+      console.error('❌ Error fetching all payments:', error);
       res.status(500).json({ 
         message: 'Failed to fetch payments', 
-        error: error.message 
+        error: error.message,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   },
@@ -306,20 +390,53 @@ const handlers = {
         return res.status(403).json({ message: 'Access denied' });
       }
 
+      console.log(`📋 Fetching payments for event: ${eventId}`);
+
       const payments = await Payment.find({ event: eventId })
-        .populate('user', 'name email')
-        .populate('registration')
+        .populate({
+          path: 'user',
+          select: 'name email',
+          options: { strictPopulate: false }
+        })
+        .populate({
+          path: 'registration',
+          select: 'registrationNo phoneNumber name',
+          options: { strictPopulate: false }
+        })
+        .lean()
         .sort({ createdAt: -1 });
+
+      console.log(`✅ Found ${payments.length} payments for event`);
+
+      // Transform data to ensure all fields are present
+      const transformedPayments = payments.map(payment => ({
+        _id: payment._id,
+        orderId: payment.orderId || 'N/A',
+        paymentId: payment.paymentId || 'Pending',
+        amount: payment.amount || 0,
+        currency: payment.currency || 'INR',
+        status: payment.status || 'pending',
+        userName: payment.userName || (payment.user?.name) || (payment.registration?.name) || 'N/A',
+        userEmail: payment.userEmail || (payment.user?.email) || 'N/A',
+        registrationNo: payment.registrationNo || (payment.registration?.registrationNo) || 'N/A',
+        phoneNumber: payment.phoneNumber || (payment.registration?.phoneNumber) || 'N/A',
+        createdAt: payment.createdAt,
+        paidAt: payment.paidAt,
+        user: payment.user || null,
+        registration: payment.registration || null
+      }));
 
       res.status(200).json({
         success: true,
-        payments
+        count: transformedPayments.length,
+        payments: transformedPayments
       });
     } catch (error) {
-      console.error('Error fetching event payments:', error);
+      console.error('❌ Error fetching event payments:', error);
       res.status(500).json({ 
         message: 'Failed to fetch event payments', 
-        error: error.message 
+        error: error.message,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   }
