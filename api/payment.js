@@ -1,31 +1,30 @@
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
-import dotenv from 'dotenv';
 import connectDB from '../lib/db.js';
 import Payment from '../models/PaymentModel.js';
 import Event from '../models/EventModel.js';
 import EventRegistration from '../models/EventRegistrationModel.js';
 import jwt from 'jsonwebtoken';
 
-// Load environment variables
-dotenv.config();
-
-// Initialize Razorpay with validation
+// Razorpay initialization - environment variables are auto-injected in Vercel
 let razorpay;
 try {
-  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-    console.error('❌ RAZORPAY credentials not found in environment variables');
-    console.error('   RAZORPAY_KEY_ID:', process.env.RAZORPAY_KEY_ID ? 'SET' : 'NOT SET');
-    console.error('   RAZORPAY_KEY_SECRET:', process.env.RAZORPAY_KEY_SECRET ? 'SET' : 'NOT SET');
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  
+  if (!keyId || !keySecret) {
+    console.error('❌ RAZORPAY credentials missing');
+    console.error('   RAZORPAY_KEY_ID:', keyId ? 'SET' : 'NOT SET');
+    console.error('   RAZORPAY_KEY_SECRET:', keySecret ? 'SET' : 'NOT SET');
   } else {
     razorpay = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID,
-      key_secret: process.env.RAZORPAY_KEY_SECRET,
+      key_id: keyId,
+      key_secret: keySecret,
     });
-    console.log('✅ Razorpay initialized successfully');
+    console.log('✅ Razorpay initialized');
   }
 } catch (error) {
-  console.error('❌ Failed to initialize Razorpay:', error.message);
+  console.error('❌ Razorpay init failed:', error.message);
 }
 
 // Auth middleware
@@ -49,9 +48,9 @@ function setCORSHeaders(res) {
 const handlers = {
   // Create Order
   'POST /create-order': async (req, res) => {
-    await connectDB();
-    
     try {
+      await connectDB();
+      
       // Check if Razorpay is initialized
       if (!razorpay) {
         return res.status(500).json({ 
@@ -123,7 +122,7 @@ const handlers = {
       res.status(500).json({ 
         message: 'Failed to create order', 
         error: error.message,
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   },
@@ -239,12 +238,21 @@ const handlers = {
 
   // Get Payment History (User)
   'GET /history': async (req, res) => {
-    await connectDB();
-    
     try {
+      await connectDB();
+      
       const decoded = verifyToken(req);
       
       console.log(`📋 Fetching payment history for user: ${decoded.userId}`);
+
+      // Ensure Payment model is loaded
+      if (!Payment) {
+        console.error('❌ Payment model not loaded');
+        return res.status(500).json({ 
+          message: 'Payment model not available',
+          error: 'MODEL_NOT_LOADED'
+        });
+      }
 
       const payments = await Payment.find({ user: decoded.userId })
         .populate({
@@ -297,16 +305,16 @@ const handlers = {
       res.status(500).json({ 
         message: 'Failed to fetch payment history', 
         error: error.message,
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   },
 
   // Get All Payments (Admin)
   'GET /admin/all': async (req, res) => {
-    await connectDB();
-    
     try {
+      await connectDB();
+      
       const decoded = verifyToken(req);
       
       // Check if user is admin
@@ -315,6 +323,15 @@ const handlers = {
       }
 
       console.log('📋 Fetching all payments (Admin)');
+
+      // Ensure Payment model is loaded
+      if (!Payment) {
+        console.error('❌ Payment model not loaded');
+        return res.status(500).json({ 
+          message: 'Payment model not available',
+          error: 'MODEL_NOT_LOADED'
+        });
+      }
 
       const payments = await Payment.find()
         .populate({
@@ -372,16 +389,16 @@ const handlers = {
       res.status(500).json({ 
         message: 'Failed to fetch payments', 
         error: error.message,
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   },
 
   // Get Payments by Event (Admin)
   'GET /admin/event/:eventId': async (req, res) => {
-    await connectDB();
-    
     try {
+      await connectDB();
+      
       const decoded = verifyToken(req);
       const { eventId } = req.params;
       
@@ -391,6 +408,15 @@ const handlers = {
       }
 
       console.log(`📋 Fetching payments for event: ${eventId}`);
+
+      // Ensure Payment model is loaded
+      if (!Payment) {
+        console.error('❌ Payment model not loaded');
+        return res.status(500).json({ 
+          message: 'Payment model not available',
+          error: 'MODEL_NOT_LOADED'
+        });
+      }
 
       const payments = await Payment.find({ event: eventId })
         .populate({
@@ -436,7 +462,7 @@ const handlers = {
       res.status(500).json({ 
         message: 'Failed to fetch event payments', 
         error: error.message,
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   }
