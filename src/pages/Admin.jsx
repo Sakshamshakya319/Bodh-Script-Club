@@ -1915,6 +1915,7 @@ const EditModal = ({ type, item, onClose, onSuccess }) => {
                     required
                     className="w-full px-4 py-3 bg-gray-900/50 border border-gray-700 rounded-lg focus:border-neon-blue focus:outline-none transition font-body text-white"
                   >
+                    <option value="faculty-incharge">Faculty Incharge</option>
                     <option value="president">President</option>
                     <option value="vice-president">Vice President</option>
                     <option value="event-coordinator">Event Coordinator</option>

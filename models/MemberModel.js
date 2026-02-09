@@ -5,7 +5,7 @@ const memberSchema = new mongoose.Schema({
   role: { 
     type: String, 
     required: true,
-    enum: ['president', 'vice-president', 'event-coordinator', 'technical-lead', 'developer', 'designer', 'content-writer', 'social-media-manager', 'other'],
+    enum: ['faculty-incharge', 'president', 'vice-president', 'event-coordinator', 'technical-lead', 'developer', 'designer', 'content-writer', 'social-media-manager', 'other'],
     default: 'developer'
   },
   image: String,

@@ -38,6 +38,7 @@ const Members = () => {
 
   const roleFilters = [
     { id: 'all', label: 'All Members' },
+    { id: 'faculty', label: 'Faculty Incharge', roles: ['faculty-incharge'] },
     { id: 'leadership', label: 'Leadership', roles: ['president', 'vice-president'] },
     { id: 'event-coordinator', label: 'Event Coordinators' },
     { id: 'developer', label: 'Developers', roles: ['technical-lead', 'developer'] },
@@ -46,6 +47,7 @@ const Members = () => {
 
   const getRoleDisplay = (role) => {
     const roleMap = {
+      'faculty-incharge': 'Faculty Incharge',
       'president': 'President',
       'vice-president': 'Vice President',
       'event-coordinator': 'Event Coordinator',
@@ -60,6 +62,14 @@ const Members = () => {
   };
 
   const demoMembers = [
+    {
+      _id: 0,
+      name: 'Dr. Rajesh Kumar',
+      role: 'faculty-incharge',
+      image: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400',
+      linkedin: 'https://linkedin.com',
+      order: 0
+    },
     {
       _id: 1,
       name: 'Bharat Kumar',
@@ -186,6 +196,7 @@ const Members = () => {
 
   // Group members by role for better organization
   const groupedMembers = {
+    faculty: filteredMembers.filter(m => m.role === 'faculty-incharge'),
     leadership: filteredMembers.filter(m => ['president', 'vice-president'].includes(m.role)),
     coordinators: filteredMembers.filter(m => m.role === 'event-coordinator'),
     technical: filteredMembers.filter(m => ['technical-lead', 'developer'].includes(m.role)),
@@ -248,6 +259,20 @@ const Members = () => {
         <div className="max-w-7xl mx-auto space-y-16">
           {selectedRole === 'all' ? (
             <>
+              {/* Faculty Incharge */}
+              {groupedMembers.faculty.length > 0 && (
+                <div>
+                  <h2 className="text-4xl font-heading font-bold gradient-text mb-8 text-center">
+                    Faculty Incharge
+                  </h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                    {groupedMembers.faculty.map((member) => (
+                      <MemberCard key={member._id} member={member} getRoleDisplay={getRoleDisplay} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Leadership */}
               {groupedMembers.leadership.length > 0 && (
                 <div>
