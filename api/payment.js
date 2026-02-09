@@ -312,27 +312,59 @@ const handlers = {
 
   // Get All Payments (Admin)
   'GET /admin/all': async (req, res) => {
+    console.log('🔍 GET /admin/all - Starting request');
+    console.log('📋 Headers:', JSON.stringify(req.headers, null, 2));
+    
     try {
+      // Step 1: Connect to database
+      console.log('🔌 Connecting to database...');
       await connectDB();
+      console.log('✅ Database connected');
       
-      const decoded = verifyToken(req);
+      // Step 2: Verify JWT token
+      console.log('🔐 Verifying token...');
+      let decoded;
+      try {
+        decoded = verifyToken(req);
+        console.log('✅ Token verified:', { userId: decoded.userId, role: decoded.role, isAdmin: decoded.isAdmin });
+      } catch (tokenError) {
+        console.error('❌ Token verification failed:', tokenError.message);
+        return res.status(401).json({ 
+          success: false,
+          message: 'Authentication failed', 
+          error: tokenError.message,
+          hint: 'Please login again'
+        });
+      }
       
-      // Check if user is admin
-      if (decoded.role !== 'admin' && !decoded.isAdmin) {
-        return res.status(403).json({ message: 'Access denied' });
+      // Step 3: Check admin role
+      console.log('👤 Checking admin role...');
+      const isAdmin = decoded.role === 'admin' || decoded.isAdmin === true;
+      console.log('Admin check result:', { role: decoded.role, isAdmin: decoded.isAdmin, result: isAdmin });
+      
+      if (!isAdmin) {
+        console.error('❌ Access denied - User is not admin');
+        return res.status(403).json({ 
+          success: false,
+          message: 'Access denied',
+          error: 'Only admins can access payment history'
+        });
       }
 
-      console.log('📋 Fetching all payments (Admin)');
+      console.log('📋 Fetching all payments (Admin)...');
 
-      // Ensure Payment model is loaded
+      // Step 4: Ensure Payment model is loaded
       if (!Payment) {
         console.error('❌ Payment model not loaded');
         return res.status(500).json({ 
+          success: false,
           message: 'Payment model not available',
           error: 'MODEL_NOT_LOADED'
         });
       }
 
+      // Step 5: Fetch payments
+      console.log('🔄 Querying database for payments...');
       const payments = await Payment.find()
         .populate({
           path: 'event',
@@ -354,7 +386,7 @@ const handlers = {
 
       console.log(`✅ Found ${payments.length} payments`);
 
-      // Transform data to ensure all fields are present
+      // Step 6: Transform data to ensure all fields are present
       const transformedPayments = payments.map(payment => ({
         _id: payment._id,
         orderId: payment.orderId || 'N/A',
@@ -379,6 +411,7 @@ const handlers = {
         registration: payment.registration || null
       }));
 
+      console.log('✅ Sending response with', transformedPayments.length, 'payments');
       res.status(200).json({
         success: true,
         count: transformedPayments.length,
@@ -386,9 +419,12 @@ const handlers = {
       });
     } catch (error) {
       console.error('❌ Error fetching all payments:', error);
+      console.error('Error stack:', error.stack);
       res.status(500).json({ 
+        success: false,
         message: 'Failed to fetch payments', 
         error: error.message,
+        errorName: error.name,
         stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
@@ -469,22 +505,39 @@ const handlers = {
 };
 
 export default async function handler(req, res) {
+  console.log('\n🚀 ========== PAYMENT API REQUEST ==========');
+  console.log('📍 Full URL:', req.url);
+  console.log('🔧 Method:', req.method);
+  console.log('🌐 Host:', req.headers.host);
+  
   setCORSHeaders(res);
   
   if (req.method === 'OPTIONS') {
+    console.log('✅ CORS preflight request handled');
     return res.status(200).end();
   }
 
   try {
+    // Parse URL and extract path
     const url = new URL(req.url, `http://${req.headers.host}`);
-    const path = url.pathname.replace('/api/payment', '');
+    const fullPath = url.pathname;
+    console.log('📂 Full Path:', fullPath);
+    
+    // Remove /api/payment prefix
+    const path = fullPath.replace('/api/payment', '') || '/';
     const route = `${req.method} ${path}`;
     
-    console.log('Payment API Route:', route);
+    console.log('🎯 Route to match:', route);
+    console.log('🗝️  Available handlers:', Object.keys(handlers).join(', '));
+    
+    // Check environment variables
+    console.log('🔐 JWT_SECRET:', process.env.JWT_SECRET ? 'SET' : '❌ NOT SET');
+    console.log('🔐 MONGODB_URI:', process.env.MONGODB_URI ? 'SET' : '❌ NOT SET');
     
     let matchedHandler = handlers[route];
     
     if (!matchedHandler) {
+      console.log('🔍 Trying pattern matching...');
       for (const [pattern, patternHandler] of Object.entries(handlers)) {
         const [method, patternPath] = pattern.split(' ');
         
@@ -495,6 +548,7 @@ export default async function handler(req, res) {
         const match = path.match(regex);
         
         if (match) {
+          console.log('✅ Pattern matched:', pattern);
           const paramNames = (patternPath.match(/:[^/]+/g) || []).map(p => p.substring(1));
           req.params = {};
           paramNames.forEach((name, index) => {
@@ -505,30 +559,46 @@ export default async function handler(req, res) {
           break;
         }
       }
+    } else {
+      console.log('✅ Exact match found for route:', route);
     }
     
     if (!matchedHandler) {
+      console.error('❌ No handler found for route:', route);
       return res.status(404).json({
+        success: false,
         message: 'Payment API endpoint not found',
-        route: route
+        route: route,
+        availableRoutes: Object.keys(handlers)
       });
     }
 
+    console.log('🚀 Executing handler...');
     await matchedHandler(req, res);
+    console.log('✅ Handler execution completed');
     
   } catch (error) {
-    console.error('Payment API Error:', error);
+    console.error('❌ ========== PAYMENT API ERROR ==========');
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
     
-    if (error.message === 'No token provided' || error.name === 'JsonWebTokenError') {
+    if (error.message === 'No token provided' || error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
       return res.status(401).json({
+        success: false,
         message: 'Authentication required',
-        error: 'INVALID_TOKEN'
+        error: error.message,
+        errorType: error.name
       });
     }
     
     res.status(500).json({
+      success: false,
       message: 'Server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'INTERNAL_ERROR'
+      error: process.env.NODE_ENV === 'development' ? error.message : 'INTERNAL_ERROR',
+      errorType: error.name
     });
+  } finally {
+    console.log('========================================\n');
   }
 }

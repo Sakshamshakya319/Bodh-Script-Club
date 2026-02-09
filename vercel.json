@@ -10,6 +10,10 @@
       "dest": "/api/health.js"
     },
     {
+      "src": "/api/diagnostic",
+      "dest": "/api/diagnostic.js"
+    },
+    {
       "src": "/api/payment/(.*)",
       "dest": "/api/payment.js"
     },
