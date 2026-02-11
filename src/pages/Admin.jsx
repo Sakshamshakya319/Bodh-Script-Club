@@ -537,118 +537,258 @@ const SubmissionsContent = ({ submissions, onUpdateStatus, onExport }) => {
       </div>
       
       {filteredSubmissions.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-700">
-                <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Name</th>
-                <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Email</th>
-                <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Reg. Number</th>
-                <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Course</th>
-                <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Status</th>
-                <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredSubmissions.map((submission) => (
-                <>
-                  <tr 
-                    key={submission._id} 
-                    className="border-b border-gray-800 hover:bg-white/5 cursor-pointer"
-                    onClick={() => setExpandedRow(expandedRow === submission._id ? null : submission._id)}
-                  >
-                    <td className="py-3 px-4 font-body text-white">{submission.name}</td>
-                    <td className="py-3 px-4 font-body text-gray-300">{submission.email}</td>
-                    <td className="py-3 px-4 font-body text-gray-300">{submission.registrationNumber}</td>
-                    <td className="py-3 px-4 font-body text-gray-300">{submission.course}</td>
-                    <td className="py-3 px-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-body ${
-                        submission.status === 'approved' ? 'bg-green-500/20 text-green-400' :
-                        submission.status === 'rejected' ? 'bg-red-500/20 text-red-400' :
-                        'bg-yellow-500/20 text-yellow-400'
-                      }`}>
-                        {submission.status}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center gap-2">
-                        {submission.status !== 'approved' && (
+        <>
+          {/* Desktop Table View - Hidden on mobile */}
+          <div className="hidden lg:block overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-700">
+                  <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Name</th>
+                  <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Email</th>
+                  <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Reg. Number</th>
+                  <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Course</th>
+                  <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Status</th>
+                  <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredSubmissions.map((submission) => (
+                  <>
+                    <tr 
+                      key={submission._id} 
+                      className="border-b border-gray-800 hover:bg-white/5 cursor-pointer"
+                      onClick={() => setExpandedRow(expandedRow === submission._id ? null : submission._id)}
+                    >
+                      <td className="py-3 px-4 font-body text-white">{submission.name}</td>
+                      <td className="py-3 px-4 font-body text-gray-300">{submission.email}</td>
+                      <td className="py-3 px-4 font-body text-gray-300">{submission.registrationNumber}</td>
+                      <td className="py-3 px-4 font-body text-gray-300">{submission.course}</td>
+                      <td className="py-3 px-4">
+                        <span className={`px-3 py-1 rounded-full text-xs font-body ${
+                          submission.status === 'approved' ? 'bg-green-500/20 text-green-400' :
+                          submission.status === 'rejected' ? 'bg-red-500/20 text-red-400' :
+                          'bg-yellow-500/20 text-yellow-400'
+                        }`}>
+                          {submission.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-2">
+                          {submission.status !== 'approved' && (
+                            <button
+                              type="button"
+                              onClick={() => onUpdateStatus(submission._id, 'approved')}
+                              className="p-2 hover:bg-green-500/20 rounded-lg transition-colors"
+                              title="Approve"
+                            >
+                              <CheckCircle size={18} className="text-green-400" />
+                            </button>
+                          )}
+                          {submission.status !== 'rejected' && (
+                            <button
+                              type="button"
+                              onClick={() => onUpdateStatus(submission._id, 'rejected')}
+                              className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
+                              title="Reject"
+                            >
+                              <XCircle size={18} className="text-red-400" />
+                            </button>
+                          )}
+                          {submission.status !== 'pending' && (
+                            <button
+                              type="button"
+                              onClick={() => onUpdateStatus(submission._id, 'pending')}
+                              className="p-2 hover:bg-yellow-500/20 rounded-lg transition-colors"
+                              title="Mark as Pending"
+                            >
+                              <Clock size={18} className="text-yellow-400" />
+                            </button>
+                          )}
                           <button
                             type="button"
-                            onClick={() => onUpdateStatus(submission._id, 'approved')}
-                            className="p-2 hover:bg-green-500/20 rounded-lg transition-colors"
-                            title="Approve"
+                            onClick={() => setExpandedRow(expandedRow === submission._id ? null : submission._id)}
+                            className="p-2 hover:bg-blue-500/20 rounded-lg transition-colors"
+                            title="View Details"
                           >
-                            <CheckCircle size={18} className="text-green-400" />
+                            <Eye size={18} className="text-blue-400" />
                           </button>
-                        )}
-                        {submission.status !== 'rejected' && (
-                          <button
-                            type="button"
-                            onClick={() => onUpdateStatus(submission._id, 'rejected')}
-                            className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
-                            title="Reject"
-                          >
-                            <XCircle size={18} className="text-red-400" />
-                          </button>
-                        )}
-                        {submission.status !== 'pending' && (
-                          <button
-                            type="button"
-                            onClick={() => onUpdateStatus(submission._id, 'pending')}
-                            className="p-2 hover:bg-yellow-500/20 rounded-lg transition-colors"
-                            title="Mark as Pending"
-                          >
-                            <Clock size={18} className="text-yellow-400" />
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setExpandedRow(expandedRow === submission._id ? null : submission._id)}
-                          className="p-2 hover:bg-blue-500/20 rounded-lg transition-colors"
-                          title="View Details"
+                        </div>
+                      </td>
+                    </tr>
+                    
+                    {/* Expanded Row Details */}
+                    {expandedRow === submission._id && (
+                      <tr className="bg-gray-900/50 border-b border-gray-800">
+                        <td colSpan="6" className="py-4 px-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div>
+                              <p className="text-xs text-gray-500 font-body mb-1">Phone Number</p>
+                              <p className="text-sm text-white font-body">{submission.phone || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 font-body mb-1">WhatsApp Number</p>
+                              <p className="text-sm text-white font-body">{submission.whatsapp || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 font-body mb-1">Section</p>
+                              <p className="text-sm text-white font-body">{submission.section || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 font-body mb-1">Year</p>
+                              <p className="text-sm text-white font-body">{submission.year || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 font-body mb-1">Batch</p>
+                              <p className="text-sm text-white font-body">{submission.batch || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 font-body mb-1">GitHub Profile</p>
+                              {submission.github ? (
+                                <a 
+                                  href={submission.github} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-sm text-neon-cyan font-body hover:underline break-all"
+                                >
+                                  {submission.github}
+                                </a>
+                              ) : (
+                                <p className="text-sm text-white font-body">N/A</p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Card View - Hidden on desktop */}
+          <div className="lg:hidden space-y-4">
+            {filteredSubmissions.map((submission) => (
+              <div 
+                key={submission._id} 
+                className="glass-effect rounded-xl p-4 border border-gray-800 hover:border-neon-cyan/30 transition-all"
+              >
+                {/* Card Header */}
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-lg font-heading font-bold text-white truncate mb-1">
+                      {submission.name}
+                    </h3>
+                    <p className="text-sm font-body text-gray-400 truncate">{submission.email}</p>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-body flex-shrink-0 ml-2 ${
+                    submission.status === 'approved' ? 'bg-green-500/20 text-green-400' :
+                    submission.status === 'rejected' ? 'bg-red-500/20 text-red-400' :
+                    'bg-yellow-500/20 text-yellow-400'
+                  }`}>
+                    {submission.status}
+                  </span>
+                </div>
+
+                {/* Card Details */}
+                <div className="space-y-2 mb-4">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500 font-body">Reg. Number:</span>
+                    <span className="text-white font-body">{submission.registrationNumber}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500 font-body">Course:</span>
+                    <span className="text-white font-body">{submission.course}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500 font-body">Phone:</span>
+                    <span className="text-white font-body">{submission.phone || 'N/A'}</span>
+                  </div>
+                  {submission.section && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500 font-body">Section:</span>
+                      <span className="text-white font-body">{submission.section}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Expandable Details */}
+                {expandedRow === submission._id && (
+                  <div className="border-t border-gray-700 pt-3 mb-3 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500 font-body">WhatsApp:</span>
+                      <span className="text-white font-body">{submission.whatsapp || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500 font-body">Year:</span>
+                      <span className="text-white font-body">{submission.year || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500 font-body">Batch:</span>
+                      <span className="text-white font-body">{submission.batch || 'N/A'}</span>
+                    </div>
+                    {submission.github && (
+                      <div className="text-sm">
+                        <span className="text-gray-500 font-body block mb-1">GitHub:</span>
+                        <a 
+                          href={submission.github} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-neon-cyan font-body hover:underline break-all"
                         >
-                          <Eye size={18} className="text-blue-400" />
-                        </button>
+                          {submission.github}
+                        </a>
                       </div>
-                    </td>
-                  </tr>
-                  
-                  {/* Expanded Row Details */}
-                  {expandedRow === submission._id && (
-                    <tr className="bg-gray-900/50 border-b border-gray-800">
-                      <td colSpan="6" className="py-4 px-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          <div>
-                            <p className="text-xs text-gray-500 font-body mb-1">Phone Number</p>
-                            <p className="text-sm text-white font-body">{submission.phone || 'N/A'}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 font-body mb-1">WhatsApp Number</p>
-                            <p className="text-sm text-white font-body">{submission.whatsapp || 'N/A'}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 font-body mb-1">Section</p>
-                            <p className="text-sm text-white font-body">{submission.section || 'N/A'}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 font-body mb-1">Year</p>
-                            <p className="text-sm text-white font-body">{submission.year || 'N/A'}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 font-body mb-1">Batch</p>
-                            <p className="text-sm text-white font-body">{submission.batch || 'N/A'}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 font-body mb-1">GitHub Profile</p>
-                            {submission.github ? (
-                              <a 
-                                href={submission.github} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="text-sm text-neon-cyan font-body hover:underline"
-                              >
-                                View Profile
+                    )}
+                  </div>
+                )}
+
+                {/* Card Actions */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {submission.status !== 'approved' && (
+                    <button
+                      type="button"
+                      onClick={() => onUpdateStatus(submission._id, 'approved')}
+                      className="flex-1 min-w-[100px] px-3 py-2 bg-green-500/10 text-green-400 border border-green-500/30 rounded-lg text-sm font-body hover:bg-green-500/20 transition-all flex items-center justify-center gap-2"
+                    >
+                      <CheckCircle size={16} />
+                      Approve
+                    </button>
+                  )}
+                  {submission.status !== 'rejected' && (
+                    <button
+                      type="button"
+                      onClick={() => onUpdateStatus(submission._id, 'rejected')}
+                      className="flex-1 min-w-[100px] px-3 py-2 bg-red-500/10 text-red-400 border border-red-500/30 rounded-lg text-sm font-body hover:bg-red-500/20 transition-all flex items-center justify-center gap-2"
+                    >
+                      <XCircle size={16} />
+                      Reject
+                    </button>
+                  )}
+                  {submission.status !== 'pending' && (
+                    <button
+                      type="button"
+                      onClick={() => onUpdateStatus(submission._id, 'pending')}
+                      className="flex-1 min-w-[100px] px-3 py-2 bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 rounded-lg text-sm font-body hover:bg-yellow-500/20 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Clock size={16} />
+                      Pending
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setExpandedRow(expandedRow === submission._id ? null : submission._id)}
+                    className="px-3 py-2 bg-blue-500/10 text-blue-400 border border-blue-500/30 rounded-lg text-sm font-body hover:bg-blue-500/20 transition-all flex items-center gap-2"
+                  >
+                    <Eye size={16} />
+                    {expandedRow === submission._id ? 'Less' : 'More'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (                                View Profile
                               </a>
                             ) : (
                               <p className="text-sm text-gray-400 font-body">Not provided</p>
@@ -998,7 +1138,8 @@ const EventsContent = ({ events, onCreate, onEdit, onDelete }) => {
                     </div>
                   </div>
                   
-                  <div className="overflow-x-auto">
+                  {/* Desktop Table View */}
+                  <div className="hidden lg:block overflow-x-auto">
                     <table className="w-full">
                       <thead>
                         <tr className="border-b border-gray-700">
@@ -1051,6 +1192,71 @@ const EventsContent = ({ events, onCreate, onEdit, onDelete }) => {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+
+                  {/* Mobile Card View */}
+                  <div className="lg:hidden space-y-4">
+                    {registrations.map((reg) => (
+                      <div 
+                        key={reg._id} 
+                        className="glass-effect rounded-xl p-4 border border-gray-800 hover:border-neon-purple/30 transition-all"
+                      >
+                        {/* Card Header */}
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-lg font-heading font-bold text-white truncate mb-1">
+                              {reg.name}
+                            </h3>
+                            <p className="text-sm font-body text-gray-400">{reg.registrationNo}</p>
+                          </div>
+                          <span className={`px-3 py-1 rounded-full text-xs font-body flex-shrink-0 ml-2 ${
+                            reg.paymentStatus === 'completed' ? 'bg-green-500/20 text-green-400' :
+                            reg.paymentStatus === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
+                            'bg-blue-500/20 text-blue-400'
+                          }`}>
+                            {reg.paymentStatus || 'free'}
+                          </span>
+                        </div>
+
+                        {/* Card Details */}
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-500 font-body">Phone:</span>
+                            <span className="text-white font-body">{reg.phoneNumber}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-500 font-body">Course:</span>
+                            <span className="text-white font-body">{reg.course || 'N/A'}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-500 font-body">Section:</span>
+                            <span className="text-white font-body">{reg.section}</span>
+                          </div>
+                          {reg.payment && (
+                            <>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-500 font-body">Amount:</span>
+                                <span className="text-green-400 font-body font-semibold">₹{reg.payment.amount}</span>
+                              </div>
+                              <div className="text-sm">
+                                <span className="text-gray-500 font-body block mb-1">Order ID:</span>
+                                <span className="text-gray-400 font-mono text-xs break-all">{reg.payment.orderId}</span>
+                              </div>
+                            </>
+                          )}
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-500 font-body">Registered:</span>
+                            <span className="text-white font-body">
+                              {reg.registeredAt ? new Date(reg.registeredAt).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric'
+                              }) : 'N/A'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </>
               ) : (
@@ -1156,52 +1362,114 @@ const PaymentHistoryContent = ({ payments }) => {
       </div>
 
       {filteredPayments.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-700">
-                <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Order ID</th>
-                <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">User</th>
-                <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Event</th>
-                <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Reg. No</th>
-                <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Phone</th>
-                <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Amount</th>
-                <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Status</th>
-                <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredPayments.map((payment) => (
-                <tr key={payment._id} className="border-b border-gray-800 hover:bg-white/5">
-                  <td className="py-3 px-4 font-mono text-xs text-gray-300">{payment.orderId}</td>
-                  <td className="py-3 px-4 font-body text-white">{payment.userName}</td>
-                  <td className="py-3 px-4 font-body text-gray-300">{payment.event?.title || 'N/A'}</td>
-                  <td className="py-3 px-4 font-body text-gray-300">{payment.registrationNo || 'N/A'}</td>
-                  <td className="py-3 px-4 font-body text-gray-300">{payment.phoneNumber || 'N/A'}</td>
-                  <td className="py-3 px-4 font-body text-white">₹{payment.amount}</td>
-                  <td className="py-3 px-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-body ${
-                      payment.status === 'success' ? 'bg-green-500/20 text-green-400' :
-                      payment.status === 'failed' ? 'bg-red-500/20 text-red-400' :
-                      'bg-yellow-500/20 text-yellow-400'
-                    }`}>
-                      {payment.status}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 font-body text-gray-300 text-sm">
-                    {payment.createdAt ? new Date(payment.createdAt).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    }) : 'N/A'}
-                  </td>
+        <>
+          {/* Desktop Table View */}
+          <div className="hidden lg:block overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-700">
+                  <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Order ID</th>
+                  <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">User</th>
+                  <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Event</th>
+                  <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Reg. No</th>
+                  <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Phone</th>
+                  <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Amount</th>
+                  <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Status</th>
+                  <th className="text-left py-3 px-4 font-body text-gray-400 text-sm">Date</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filteredPayments.map((payment) => (
+                  <tr key={payment._id} className="border-b border-gray-800 hover:bg-white/5">
+                    <td className="py-3 px-4 font-mono text-xs text-gray-300">{payment.orderId}</td>
+                    <td className="py-3 px-4 font-body text-white">{payment.userName}</td>
+                    <td className="py-3 px-4 font-body text-gray-300">{payment.event?.title || 'N/A'}</td>
+                    <td className="py-3 px-4 font-body text-gray-300">{payment.registrationNo || 'N/A'}</td>
+                    <td className="py-3 px-4 font-body text-gray-300">{payment.phoneNumber || 'N/A'}</td>
+                    <td className="py-3 px-4 font-body text-white">₹{payment.amount}</td>
+                    <td className="py-3 px-4">
+                      <span className={`px-3 py-1 rounded-full text-xs font-body ${
+                        payment.status === 'success' ? 'bg-green-500/20 text-green-400' :
+                        payment.status === 'failed' ? 'bg-red-500/20 text-red-400' :
+                        'bg-yellow-500/20 text-yellow-400'
+                      }`}>
+                        {payment.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 font-body text-gray-300 text-sm">
+                      {payment.createdAt ? new Date(payment.createdAt).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      }) : 'N/A'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="lg:hidden space-y-4">
+            {filteredPayments.map((payment) => (
+              <div 
+                key={payment._id} 
+                className="glass-effect rounded-xl p-4 border border-gray-800 hover:border-neon-cyan/30 transition-all"
+              >
+                {/* Card Header */}
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-lg font-heading font-bold text-white truncate mb-1">
+                      {payment.userName}
+                    </h3>
+                    <p className="text-sm font-body text-gray-400 truncate">{payment.event?.title || 'N/A'}</p>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-body flex-shrink-0 ml-2 ${
+                    payment.status === 'success' ? 'bg-green-500/20 text-green-400' :
+                    payment.status === 'failed' ? 'bg-red-500/20 text-red-400' :
+                    'bg-yellow-500/20 text-yellow-400'
+                  }`}>
+                    {payment.status}
+                  </span>
+                </div>
+
+                {/* Card Details */}
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500 font-body">Amount:</span>
+                    <span className="text-green-400 font-body font-semibold text-lg">₹{payment.amount}</span>
+                  </div>
+                  <div className="text-sm">
+                    <span className="text-gray-500 font-body block mb-1">Order ID:</span>
+                    <span className="text-gray-400 font-mono text-xs break-all">{payment.orderId}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500 font-body">Reg. No:</span>
+                    <span className="text-white font-body">{payment.registrationNo || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500 font-body">Phone:</span>
+                    <span className="text-white font-body">{payment.phoneNumber || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500 font-body">Date:</span>
+                    <span className="text-white font-body">
+                      {payment.createdAt ? new Date(payment.createdAt).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      }) : 'N/A'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       ) : (
         <div className="text-center py-12">
           <IndianRupee size={48} className="mx-auto text-gray-600 mb-4" />
