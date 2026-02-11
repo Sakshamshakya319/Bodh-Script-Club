@@ -724,11 +724,24 @@ const handlers = {
     const eventData = req.body;
     
     try {
-      const event = await Event.findByIdAndUpdate(
-        id,
-        { ...eventData, updatedAt: new Date() },
-        { new: true }
-      );
+      // Find event by slug or ObjectId
+      let event;
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        event = await Event.findByIdAndUpdate(
+          id,
+          { ...eventData, updatedAt: new Date() },
+          { new: true }
+        );
+      }
+      
+      if (!event) {
+        // Try finding by slug and update
+        event = await Event.findOneAndUpdate(
+          { slug: id },
+          { ...eventData, updatedAt: new Date() },
+          { new: true }
+        );
+      }
 
       if (!event) {
         return res.status(404).json({ message: 'Event not found' });
@@ -754,7 +767,15 @@ const handlers = {
     const { id } = req.params;
     
     try {
-      const event = await Event.findByIdAndDelete(id);
+      // Find and delete by slug or ObjectId
+      let event;
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        event = await Event.findByIdAndDelete(id);
+      }
+      
+      if (!event) {
+        event = await Event.findOneAndDelete({ slug: id });
+      }
 
       if (!event) {
         return res.status(404).json({ message: 'Event not found' });
@@ -903,8 +924,21 @@ const handlers = {
         return res.status(403).json({ message: 'Access denied' });
       }
 
-      // Fetch registrations with lean() for better performance
-      const registrations = await EventRegistration.find({ event: id })
+      // Find event by slug or ObjectId to get the actual _id
+      let event;
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        event = await Event.findById(id);
+      }
+      if (!event) {
+        event = await Event.findOne({ slug: id });
+      }
+      
+      if (!event) {
+        return res.status(404).json({ message: 'Event not found' });
+      }
+
+      // Fetch registrations using the event's ObjectId
+      const registrations = await EventRegistration.find({ event: event._id })
         .populate({
           path: 'user',
           select: 'name email',
@@ -933,6 +967,10 @@ const handlers = {
         department: reg.department || 'N/A',
         paymentStatus: reg.paymentStatus || 'free',
         registeredAt: reg.registeredAt,
+        // Team registration fields
+        isTeamRegistration: reg.isTeamRegistration || false,
+        teamName: reg.teamName || null,
+        teamMembers: reg.teamMembers || [],
         user: reg.user || null,
         payment: reg.payment ? {
           _id: reg.payment._id,
@@ -971,12 +1009,20 @@ const handlers = {
         return res.status(403).json({ message: 'Access denied' });
       }
 
-      const event = await Event.findById(id);
+      // Find event by slug or ObjectId
+      let event;
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        event = await Event.findById(id);
+      }
+      if (!event) {
+        event = await Event.findOne({ slug: id });
+      }
+      
       if (!event) {
         return res.status(404).json({ message: 'Event not found' });
       }
 
-      const registrations = await EventRegistration.find({ event: id })
+      const registrations = await EventRegistration.find({ event: event._id })
         .populate({
           path: 'user',
           select: 'name email',
@@ -1105,8 +1151,21 @@ const handlers = {
       const decoded = verifyToken(req);
       const { id } = req.params;
 
+      // Find event by slug or ObjectId
+      let event;
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        event = await Event.findById(id);
+      }
+      if (!event) {
+        event = await Event.findOne({ slug: id });
+      }
+      
+      if (!event) {
+        return res.status(404).json({ message: 'Event not found' });
+      }
+
       const registration = await EventRegistration.findOne({
-        event: id,
+        event: event._id,
         user: decoded.userId
       });
 
