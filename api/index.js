@@ -1,7 +1,6 @@
 // Consolidated API handler for all routes
 import connectDB from '../lib/db.js';
 import mongoose from 'mongoose';
-import Razorpay from 'razorpay';
 import crypto from 'crypto';
 
 // Import all models
@@ -12,26 +11,8 @@ import Gallery from '../models/GalleryModel.js';
 import Member from '../models/MemberModel.js';
 import Submission from '../models/SubmissionModel.js';
 import Testimonial from '../models/TestimonialModel.js';
-import Payment from '../models/PaymentModel.js';
 
 import jwt from 'jsonwebtoken';
-
-// Initialize Razorpay
-let razorpay;
-try {
-  const keyId = process.env.RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
-  
-  if (keyId && keySecret) {
-    razorpay = new Razorpay({
-      key_id: keyId,
-      key_secret: keySecret,
-    });
-    console.log('✅ Razorpay initialized in index.js');
-  }
-} catch (error) {
-  console.error('❌ Razorpay init failed:', error.message);
-}
 
 // CORS headers helper
 function setCORSHeaders(res) {
@@ -1008,11 +989,6 @@ const handlers = {
           select: 'name email',
           options: { strictPopulate: false }
         })
-        .populate({
-          path: 'payment',
-          select: 'orderId paymentId amount status',
-          options: { strictPopulate: false }
-        })
         .lean()
         .sort({ registeredAt: -1 });
 
@@ -1035,14 +1011,7 @@ const handlers = {
         isTeamRegistration: reg.isTeamRegistration || false,
         teamName: reg.teamName || null,
         teamMembers: reg.teamMembers || [],
-        user: reg.user || null,
-        payment: reg.payment ? {
-          _id: reg.payment._id,
-          orderId: reg.payment.orderId || 'N/A',
-          paymentId: reg.payment.paymentId || 'N/A',
-          amount: reg.payment.amount || 0,
-          status: reg.payment.status || 'pending'
-        } : null
+        user: reg.user || null
       }));
 
       res.status(200).json({
@@ -1261,11 +1230,6 @@ const handlers = {
           select: 'title date location image price isPaid',
           options: { strictPopulate: false }
         })
-        .populate({
-          path: 'payment',
-          select: 'orderId paymentId amount status',
-          options: { strictPopulate: false }
-        })
         .lean()
         .sort({ registeredAt: -1 });
 
@@ -1292,14 +1256,7 @@ const handlers = {
           image: reg.event.image,
           price: reg.event.price || 0,
           isPaid: reg.event.isPaid || false
-        } : { title: 'Unknown Event' },
-        payment: reg.payment ? {
-          _id: reg.payment._id,
-          orderId: reg.payment.orderId || 'N/A',
-          paymentId: reg.payment.paymentId || 'N/A',
-          amount: reg.payment.amount || 0,
-          status: reg.payment.status || 'pending'
-        } : null
+        } : { title: 'Unknown Event' }
       }));
 
       res.status(200).json({
@@ -1569,277 +1526,6 @@ const handlers = {
       res.status(500).json({
         message: 'Failed to submit join request',
         error: error.message
-      });
-    }
-  },
-
-  // Payment - Redirect /payment to /payment/admin/all (for backward compatibility)
-  'GET /payment': async (req, res) => {
-    console.log('⚠️ [REDIRECT] /payment → /payment/admin/all');
-    
-    try {
-      await connectDB();
-      
-      const decoded = verifyToken(req);
-      
-      if (decoded.role !== 'admin' && !decoded.isAdmin) {
-        return res.status(403).json({ message: 'Access denied' });
-      }
-
-      console.log('📋 [REDIRECT] Fetching all payments (Admin)');
-
-      const payments = await Payment.find()
-        .populate({
-          path: 'event',
-          select: 'title date location price',
-          options: { strictPopulate: false }
-        })
-        .populate({
-          path: 'user',
-          select: 'name email',
-          options: { strictPopulate: false }
-        })
-        .populate({
-          path: 'registration',
-          select: 'registrationNo phoneNumber',
-          options: { strictPopulate: false }
-        })
-        .lean()
-        .sort({ createdAt: -1 });
-
-      console.log(`✅ [REDIRECT] Found ${payments.length} payments`);
-
-      const transformedPayments = payments.map(payment => ({
-        _id: payment._id,
-        orderId: payment.orderId || 'N/A',
-        paymentId: payment.paymentId || 'Pending',
-        amount: payment.amount || 0,
-        currency: payment.currency || 'INR',
-        status: payment.status || 'pending',
-        userName: payment.userName || (payment.user?.name) || 'N/A',
-        userEmail: payment.userEmail || (payment.user?.email) || 'N/A',
-        registrationNo: payment.registrationNo || (payment.registration?.registrationNo) || 'N/A',
-        phoneNumber: payment.phoneNumber || (payment.registration?.phoneNumber) || 'N/A',
-        createdAt: payment.createdAt,
-        paidAt: payment.paidAt,
-        event: payment.event ? {
-          _id: payment.event._id,
-          title: payment.event.title || 'Event',
-          date: payment.event.date,
-          location: payment.event.location || 'TBA',
-          price: payment.event.price || 0
-        } : { title: 'Unknown Event' },
-        user: payment.user || null,
-        registration: payment.registration || null
-      }));
-
-      res.status(200).json({
-        success: true,
-        count: transformedPayments.length,
-        payments: transformedPayments
-      });
-    } catch (error) {
-      console.error('❌ [REDIRECT] Error fetching payments:', error);
-      res.status(500).json({ 
-        message: 'Failed to fetch payments', 
-        error: error.message,
-        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-      });
-    }
-  },
-
-  // Payment - Get All Payments (Admin) - SIMPLIFIED FOR VERCEL
-  'GET /payment/admin/all': async (req, res) => {
-    console.log('🔵 [PAYMENT] GET /payment/admin/all - START');
-    
-    try {
-      console.log('🔵 [PAYMENT] Connecting to database...');
-      await connectDB();
-      console.log('✅ [PAYMENT] Database connected');
-      
-      console.log('🔵 [PAYMENT] Verifying token...');
-      const decoded = verifyToken(req);
-      console.log('✅ [PAYMENT] Token verified:', decoded.userId);
-      
-      if (decoded.role !== 'admin' && !decoded.isAdmin) {
-        console.log('❌ [PAYMENT] Access denied');
-        return res.status(403).json({ message: 'Access denied' });
-      }
-
-      console.log('🔵 [PAYMENT] Fetching payments (NO POPULATE)...');
-      
-      // Fetch payments WITHOUT populate to avoid errors
-      const payments = await Payment.find()
-        .select('orderId paymentId amount currency status userName userEmail registrationNo phoneNumber createdAt paidAt')
-        .lean()
-        .sort({ createdAt: -1 })
-        .limit(50);
-
-      console.log(`✅ [PAYMENT] Found ${payments.length} payments`);
-
-      // Simple transformation without any lookups
-      const transformedPayments = payments.map(payment => ({
-        _id: payment._id,
-        orderId: payment.orderId || 'N/A',
-        paymentId: payment.paymentId || 'Pending',
-        amount: payment.amount || 0,
-        currency: payment.currency || 'INR',
-        status: payment.status || 'pending',
-        userName: payment.userName || 'N/A',
-        userEmail: payment.userEmail || 'N/A',
-        registrationNo: payment.registrationNo || 'N/A',
-        phoneNumber: payment.phoneNumber || 'N/A',
-        createdAt: payment.createdAt,
-        paidAt: payment.paidAt,
-        event: { title: 'Event' }, // Simplified
-        user: null,
-        registration: null
-      }));
-
-      console.log('✅ [PAYMENT] Sending response');
-
-      return res.status(200).json({
-        success: true,
-        count: transformedPayments.length,
-        payments: transformedPayments
-      });
-      
-    } catch (error) {
-      console.error('❌ [PAYMENT] ERROR:', error.name);
-      console.error('❌ [PAYMENT] MESSAGE:', error.message);
-      console.error('❌ [PAYMENT] STACK:', error.stack);
-      
-      return res.status(500).json({ 
-        success: false,
-        message: 'Failed to fetch payments', 
-        error: error.message,
-        errorType: error.name
-      });
-    }
-  },
-
-  // Payment - Get Payment History (User)
-  'GET /payment/history': async (req, res) => {
-    try {
-      await connectDB();
-      
-      const decoded = verifyToken(req);
-      
-      console.log(`📋 [index.js] Fetching payment history for user: ${decoded.userId}`);
-
-      const payments = await Payment.find({ user: decoded.userId })
-        .populate({
-          path: 'event',
-          select: 'title date location image price',
-          options: { strictPopulate: false }
-        })
-        .populate({
-          path: 'registration',
-          select: 'registrationNo name phoneNumber',
-          options: { strictPopulate: false }
-        })
-        .lean()
-        .sort({ createdAt: -1 });
-
-      console.log(`✅ [index.js] Found ${payments.length} payments`);
-
-      const transformedPayments = payments.map(payment => ({
-        _id: payment._id,
-        orderId: payment.orderId || 'N/A',
-        paymentId: payment.paymentId || 'Pending',
-        amount: payment.amount || 0,
-        currency: payment.currency || 'INR',
-        status: payment.status || 'pending',
-        userName: payment.userName || 'N/A',
-        userEmail: payment.userEmail || 'N/A',
-        registrationNo: payment.registrationNo || 'N/A',
-        phoneNumber: payment.phoneNumber || 'N/A',
-        createdAt: payment.createdAt,
-        paidAt: payment.paidAt,
-        event: payment.event ? {
-          _id: payment.event._id,
-          title: payment.event.title || 'Event',
-          date: payment.event.date,
-          location: payment.event.location || 'TBA',
-          image: payment.event.image,
-          price: payment.event.price || 0
-        } : null,
-        registration: payment.registration || null
-      }));
-
-      res.status(200).json({
-        success: true,
-        count: transformedPayments.length,
-        payments: transformedPayments
-      });
-    } catch (error) {
-      console.error('❌ [index.js] Error fetching payment history:', error);
-      res.status(500).json({ 
-        message: 'Failed to fetch payment history', 
-        error: error.message,
-        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-      });
-    }
-  },
-
-  // Payment - Get Payments by Event (Admin)
-  'GET /payment/admin/event/:eventId': async (req, res) => {
-    try {
-      await connectDB();
-      
-      const decoded = verifyToken(req);
-      const { eventId } = req.params;
-      
-      if (decoded.role !== 'admin' && !decoded.isAdmin) {
-        return res.status(403).json({ message: 'Access denied' });
-      }
-
-      console.log(`📋 [index.js] Fetching payments for event: ${eventId}`);
-
-      const payments = await Payment.find({ event: eventId })
-        .populate({
-          path: 'user',
-          select: 'name email',
-          options: { strictPopulate: false }
-        })
-        .populate({
-          path: 'registration',
-          select: 'registrationNo phoneNumber name',
-          options: { strictPopulate: false }
-        })
-        .lean()
-        .sort({ createdAt: -1 });
-
-      console.log(`✅ [index.js] Found ${payments.length} payments for event`);
-
-      const transformedPayments = payments.map(payment => ({
-        _id: payment._id,
-        orderId: payment.orderId || 'N/A',
-        paymentId: payment.paymentId || 'Pending',
-        amount: payment.amount || 0,
-        currency: payment.currency || 'INR',
-        status: payment.status || 'pending',
-        userName: payment.userName || (payment.user?.name) || (payment.registration?.name) || 'N/A',
-        userEmail: payment.userEmail || (payment.user?.email) || 'N/A',
-        registrationNo: payment.registrationNo || (payment.registration?.registrationNo) || 'N/A',
-        phoneNumber: payment.phoneNumber || (payment.registration?.phoneNumber) || 'N/A',
-        createdAt: payment.createdAt,
-        paidAt: payment.paidAt,
-        user: payment.user || null,
-        registration: payment.registration || null
-      }));
-
-      res.status(200).json({
-        success: true,
-        count: transformedPayments.length,
-        payments: transformedPayments
-      });
-    } catch (error) {
-      console.error('❌ [index.js] Error fetching event payments:', error);
-      res.status(500).json({ 
-        message: 'Failed to fetch event payments', 
-        error: error.message,
-        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   },

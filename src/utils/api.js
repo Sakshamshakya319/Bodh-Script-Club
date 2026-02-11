@@ -142,16 +142,6 @@ export const eventsAPI = {
   deleteGalleryImage: (id, imageId) => api.delete(`/events/${id}/gallery/${imageId}`),
 };
 
-// Payment API
-export const paymentAPI = {
-  createOrder: (data) => api.post('/payment/create-order', data),
-  verifyPayment: (data) => api.post('/payment/verify', data),
-  getHistory: () => api.get('/payment/history'),
-  // Use dedicated serverless function for admin payment history
-  getAllPayments: () => api.get('/payment-history'),
-  getEventPayments: (eventId) => api.get(`/payment/admin/event/${eventId}`),
-};
-
 // Members API
 export const membersAPI = {
   getAll: () => api.get('/members'),
