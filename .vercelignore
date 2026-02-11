@@ -1,6 +1,44 @@
-# Vercel ignore file
+# Dependencies
 node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment
 .env
 .env.local
-*.log
+.env.*.local
+
+# Build outputs
+dist
+.cache
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs
+
+# Scripts (not needed in production)
+scripts/test-*.js
+scripts/debug-*.js
+scripts/seed*.js
+scripts/createAdmin.js
+
+# Development files
+server.js
+build.js
+vite.config.js.timestamp-*
+
+# Git
+.git
+.gitignore

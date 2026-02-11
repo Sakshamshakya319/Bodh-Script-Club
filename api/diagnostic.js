@@ -28,8 +28,6 @@ export default async function handler(req, res) {
       envVariables: {
         JWT_SECRET: process.env.JWT_SECRET ? '✅ SET' : '❌ NOT SET',
         MONGODB_URI: process.env.MONGODB_URI ? '✅ SET' : '❌ NOT SET',
-        RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID ? '✅ SET' : '❌ NOT SET',
-        RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET ? '✅ SET' : '❌ NOT SET',
       },
       
       // MongoDB connection string info (without credentials)
@@ -50,9 +48,7 @@ export default async function handler(req, res) {
       // Check if all required vars are set
       allRequiredVarsSet: !!(
         process.env.JWT_SECRET &&
-        process.env.MONGODB_URI &&
-        process.env.RAZORPAY_KEY_ID &&
-        process.env.RAZORPAY_KEY_SECRET
+        process.env.MONGODB_URI
       ),
     };
 
@@ -63,9 +59,6 @@ export default async function handler(req, res) {
     }
     if (!process.env.MONGODB_URI) {
       warnings.push('MONGODB_URI is not set - database operations will fail');
-    }
-    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-      warnings.push('Razorpay credentials not set - payment operations will fail');
     }
 
     res.status(200).json({
