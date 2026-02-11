@@ -1781,6 +1781,10 @@ const CreateModal = ({ type, onClose, onSuccess }) => {
                       className="w-full px-4 py-3 bg-gray-900/50 border border-gray-700 rounded-lg focus:border-neon-blue focus:outline-none transition font-body text-white"
                     >
                       <option value="workshop">Workshop</option>
+                      <option value="bootcamp">Bootcamp</option>
+                      <option value="webinar">Webinar</option>
+                      <option value="tech-training">Tech Training Session</option>
+                      <option value="coding-class">Coding Class / Tutorial</option>
                       <option value="meeting">Meeting</option>
                       <option value="hackathon">Hackathon</option>
                       <option value="other">Other</option>
@@ -2314,6 +2318,10 @@ const EditModal = ({ type, item, onClose, onSuccess }) => {
                       className="w-full px-4 py-3 bg-gray-900/50 border border-gray-700 rounded-lg focus:border-neon-blue focus:outline-none transition font-body text-white"
                     >
                       <option value="workshop">Workshop</option>
+                      <option value="bootcamp">Bootcamp</option>
+                      <option value="webinar">Webinar</option>
+                      <option value="tech-training">Tech Training Session</option>
+                      <option value="coding-class">Coding Class / Tutorial</option>
                       <option value="meeting">Meeting</option>
                       <option value="hackathon">Hackathon</option>
                       <option value="other">Other</option>

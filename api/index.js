@@ -1,5 +1,6 @@
 // Consolidated API handler for all routes
 import connectDB from '../lib/db.js';
+import mongoose from 'mongoose';
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
 
