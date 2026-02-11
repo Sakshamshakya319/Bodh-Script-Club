@@ -17,6 +17,8 @@
     "generate-jwt-secrets": "node scripts/generateJWTSecrets.js generate",
     "validate-jwt-secrets": "node scripts/generateJWTSecrets.js validate",
     "setup-vercel-env": "node scripts/setupVercelEnv.js",
+    "setup-vercel-env-quick": "node scripts/setup-vercel-env-quick.js",
+    "verify-production": "node scripts/verify-production-api.js",
     "add-slugs": "node scripts/add-slugs-to-events.js",
     "seed-about": "node scripts/seedAbout.js",
     "seed-events": "node scripts/seedEvents.js",
