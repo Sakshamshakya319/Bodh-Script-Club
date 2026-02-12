@@ -24,17 +24,25 @@ function setCORSHeaders(res) {
 async function authenticate(req) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new Error('Authentication required');
+    const error = new Error('Authentication required');
+    error.statusCode = 401;
+    throw error;
   }
   
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.userId || decoded.id);
-    if (!user) throw new Error('User not found');
+    if (!user) {
+      const error = new Error('User not found');
+      error.statusCode = 401;
+      throw error;
+    }
     return user;
   } catch (error) {
-    throw new Error('Invalid or expired token');
+    const authError = new Error('Invalid or expired token');
+    authError.statusCode = 401;
+    throw authError;
   }
 }
 
@@ -42,7 +50,9 @@ async function authenticate(req) {
 async function checkAdmin(req) {
   const user = await authenticate(req);
   if (!user.isAdmin && user.role !== 'admin') {
-    throw new Error('Admin access required');
+    const error = new Error('Admin access required');
+    error.statusCode = 403;
+    throw error;
   }
   return user;
 }
@@ -82,20 +92,44 @@ async function handleRegistration(req, res) {
     });
   }
 
-  // 3. Check for duplicate registration
-  const existingRegistration = await EventRegistration.findOne({
+  // 3. Authenticate user if token is provided
+  let loggedInUser = null;
+  try {
+    loggedInUser = await authenticate(req);
+  } catch (e) {
+    // Not logged in or invalid token, continue as guest
+  }
+
+  // 4. Check for duplicate registration
+  // Case A: Check by registration number (for everyone)
+  const existingByRegNo = await EventRegistration.findOne({
     event: event._id,
     registrationNo: registrationData.registrationNo.trim().toUpperCase()
   });
 
-  if (existingRegistration) {
+  if (existingByRegNo) {
     return res.status(400).json({ 
-      message: 'You have already registered for this event with this registration number.',
+      message: 'This registration number is already registered for this event.',
       error: 'DUPLICATE_REGISTRATION'
     });
   }
 
-  // 4. Handle team registration for hackathons
+  // Case B: Check by user ID (if logged in)
+  if (loggedInUser) {
+    const existingByUser = await EventRegistration.findOne({
+      event: event._id,
+      user: loggedInUser._id
+    });
+
+    if (existingByUser) {
+      return res.status(400).json({ 
+        message: 'You have already registered for this event.',
+        error: 'DUPLICATE_REGISTRATION'
+      });
+    }
+  }
+
+  // 5. Handle team registration for hackathons
   if (event.eventType === 'hackathon' && registrationData.isTeamRegistration) {
     const teamSize = (registrationData.teamMembers?.length || 0) + 1;
     const minSize = event.teamSettings?.minTeamSize || 1;
@@ -108,9 +142,10 @@ async function handleRegistration(req, res) {
     }
   }
 
-  // 5. Create the registration
+  // 6. Create the registration
   const registration = new EventRegistration({
     event: event._id,
+    user: loggedInUser ? loggedInUser._id : undefined, // Using undefined instead of null to avoid unique index issues if sparse
     name: registrationData.name.trim(),
     registrationNo: registrationData.registrationNo.trim().toUpperCase(),
     phoneNumber: registrationData.phoneNumber.trim(),
@@ -126,30 +161,32 @@ async function handleRegistration(req, res) {
     registeredAt: new Date()
   });
 
-  // Link to user if logged in
   try {
-    const user = await authenticate(req);
-    registration.user = user._id;
-  } catch (e) {
-    // Not logged in, that's fine for public registration
-  }
+    await registration.save();
 
-  await registration.save();
+    // 7. Update event registration count
+    await Event.findByIdAndUpdate(event._id, {
+      $inc: { registrationCount: 1 }
+    });
 
-  // 6. Update event registration count
-  await Event.findByIdAndUpdate(event._id, {
-    $inc: { registrationCount: 1 }
-  });
-
-  return res.status(201).json({
-    success: true,
-    message: 'Registration successful!',
-    registration: {
-      id: registration._id,
-      name: registration.name,
-      eventTitle: event.title
+    return res.status(201).json({
+      success: true,
+      message: 'Registration successful!',
+      registration: {
+        id: registration._id,
+        name: registration.name,
+        eventTitle: event.title
+      }
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({
+        message: 'You have already registered for this event.',
+        error: 'DUPLICATE_REGISTRATION'
+      });
     }
-  });
+    throw error;
+  }
 }
 
 // Route handlers
@@ -317,7 +354,19 @@ const handlers = {
 
   'GET /events/:id/registrations': async (req, res) => {
     await checkAdmin(req);
-    const registrations = await EventRegistration.find({ event: req.params.id })
+    const { id } = req.params;
+    
+    let event;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      event = await Event.findById(id);
+    } else {
+      event = await Event.findOne({ slug: id });
+    }
+    
+    if (!event) return res.status(404).json({ message: 'Event not found' });
+
+    const registrations = await EventRegistration.find({ event: event._id })
+      .populate('user', 'name email registrationNumber')
       .sort({ registeredAt: -1 });
     res.status(200).json(registrations);
   },
@@ -338,7 +387,12 @@ const handlers = {
 
   'PUT /members/:id': async (req, res) => {
     await checkAdmin(req);
-    const member = await Member.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const member = await Member.findByIdAndUpdate(
+      req.params.id, 
+      { ...req.body, updatedAt: new Date() }, 
+      { new: true, runValidators: true }
+    );
+    if (!member) return res.status(404).json({ message: 'Member not found' });
     res.status(200).json(member);
   },
 
@@ -351,9 +405,17 @@ const handlers = {
   // --- SUBMISSION ROUTES ---
 
   'POST /submissions': async (req, res) => {
-    const submission = new Submission(req.body);
+    const submission = new Submission({
+      ...req.body,
+      status: 'pending',
+      submittedAt: new Date()
+    });
     await submission.save();
-    res.status(201).json(submission);
+    res.status(201).json({
+      success: true,
+      message: 'Join request submitted successfully!',
+      submission
+    });
   },
 
   'GET /submissions': async (req, res) => {
