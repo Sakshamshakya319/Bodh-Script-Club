@@ -47,6 +47,111 @@ async function checkAdmin(req) {
   return user;
 }
 
+// Registration Logic Helper
+async function handleRegistration(req, res) {
+  const eventId = req.params.id || req.query.eventId || req.body.eventId;
+  const registrationData = req.body;
+
+  if (!eventId) {
+    return res.status(400).json({ message: 'Event ID is required' });
+  }
+
+  console.log(`🎯 [REGISTRATION] Registering for event: ${eventId}`);
+
+  // 1. Find the event
+  let event;
+  if (mongoose.Types.ObjectId.isValid(eventId)) {
+    event = await Event.findById(eventId);
+  }
+  if (!event) {
+    event = await Event.findOne({ slug: eventId });
+  }
+  
+  if (!event) {
+    return res.status(404).json({ message: 'Event not found' });
+  }
+
+  // 2. Validate required fields
+  const requiredFields = ['name', 'registrationNo', 'phoneNumber', 'course', 'section', 'year', 'department'];
+  const missingFields = requiredFields.filter(field => !registrationData[field]);
+  
+  if (missingFields.length > 0) {
+    return res.status(400).json({ 
+      message: `Missing required fields: ${missingFields.join(', ')}`,
+      missingFields
+    });
+  }
+
+  // 3. Check for duplicate registration
+  const existingRegistration = await EventRegistration.findOne({
+    event: event._id,
+    registrationNo: registrationData.registrationNo.trim().toUpperCase()
+  });
+
+  if (existingRegistration) {
+    return res.status(400).json({ 
+      message: 'You have already registered for this event with this registration number.',
+      error: 'DUPLICATE_REGISTRATION'
+    });
+  }
+
+  // 4. Handle team registration for hackathons
+  if (event.eventType === 'hackathon' && registrationData.isTeamRegistration) {
+    const teamSize = (registrationData.teamMembers?.length || 0) + 1;
+    const minSize = event.teamSettings?.minTeamSize || 1;
+    const maxSize = event.teamSettings?.maxTeamSize || 4;
+
+    if (teamSize < minSize || teamSize > maxSize) {
+      return res.status(400).json({ 
+        message: `Team size must be between ${minSize} and ${maxSize} members.` 
+      });
+    }
+  }
+
+  // 5. Create the registration
+  const registration = new EventRegistration({
+    event: event._id,
+    name: registrationData.name.trim(),
+    registrationNo: registrationData.registrationNo.trim().toUpperCase(),
+    phoneNumber: registrationData.phoneNumber.trim(),
+    whatsappNumber: registrationData.whatsappNumber?.trim() || registrationData.phoneNumber.trim(),
+    section: registrationData.section.trim(),
+    department: registrationData.department.trim(),
+    year: registrationData.year.trim(),
+    course: registrationData.course.trim(),
+    isTeamRegistration: registrationData.isTeamRegistration || false,
+    teamName: registrationData.teamName?.trim() || null,
+    teamMembers: registrationData.teamMembers || [],
+    paymentStatus: event.isPaid ? 'pending' : 'free',
+    registeredAt: new Date()
+  });
+
+  // Link to user if logged in
+  try {
+    const user = await authenticate(req);
+    registration.user = user._id;
+  } catch (e) {
+    // Not logged in, that's fine for public registration
+  }
+
+  await registration.save();
+
+  // 6. Update event registration count
+  await Event.findByIdAndUpdate(event._id, {
+    $inc: { registrationCount: 1 }
+  });
+
+  return res.status(201).json({
+    success: true,
+    message: 'Registration successful!',
+    registration: {
+      id: registration._id,
+      name: registration.name,
+      eventTitle: event.title
+    }
+  });
+}
+
 // Route handlers
 const handlers = {
   // --- AUTH ROUTES ---
@@ -175,106 +280,11 @@ const handlers = {
     res.status(200).json({ message: 'Event deleted successfully' });
   },
 
-  // CRITICAL: Event Registration Handler
-  'POST /events/:id/register': async (req, res) => {
-    const { id: eventId } = req.params;
-    const registrationData = req.body;
+  // CRITICAL: Event Registration Handler (Handles both /api/events/:id/register and /api/register?eventId=...)
+  'POST /events/:id/register': handleRegistration,
 
-    console.log(`🎯 [REGISTRATION] Registering for event: ${eventId}`);
-
-    // 1. Find the event
-    let event;
-    if (mongoose.Types.ObjectId.isValid(eventId)) {
-      event = await Event.findById(eventId);
-    }
-    if (!event) {
-      event = await Event.findOne({ slug: eventId });
-    }
-    
-    if (!event) {
-      return res.status(404).json({ message: 'Event not found' });
-    }
-
-    // 2. Validate required fields
-    const requiredFields = ['name', 'registrationNo', 'phoneNumber', 'course', 'section', 'year', 'department'];
-    const missingFields = requiredFields.filter(field => !registrationData[field]);
-    
-    if (missingFields.length > 0) {
-      return res.status(400).json({ 
-        message: `Missing required fields: ${missingFields.join(', ')}`,
-        missingFields
-      });
-    }
-
-    // 3. Check for duplicate registration
-    const existingRegistration = await EventRegistration.findOne({
-      event: event._id,
-      registrationNo: registrationData.registrationNo.trim().toUpperCase()
-    });
-
-    if (existingRegistration) {
-      return res.status(400).json({ 
-        message: 'You have already registered for this event with this registration number.',
-        error: 'DUPLICATE_REGISTRATION'
-      });
-    }
-
-    // 4. Handle team registration for hackathons
-    if (event.eventType === 'hackathon' && registrationData.isTeamRegistration) {
-      const teamSize = (registrationData.teamMembers?.length || 0) + 1;
-      const minSize = event.teamSettings?.minTeamSize || 1;
-      const maxSize = event.teamSettings?.maxTeamSize || 4;
-
-      if (teamSize < minSize || teamSize > maxSize) {
-        return res.status(400).json({ 
-          message: `Team size must be between ${minSize} and ${maxSize} members.` 
-        });
-      }
-    }
-
-    // 5. Create the registration
-    const registration = new EventRegistration({
-      event: event._id,
-      name: registrationData.name.trim(),
-      registrationNo: registrationData.registrationNo.trim().toUpperCase(),
-      phoneNumber: registrationData.phoneNumber.trim(),
-      whatsappNumber: registrationData.whatsappNumber?.trim() || registrationData.phoneNumber.trim(),
-      section: registrationData.section.trim(),
-      department: registrationData.department.trim(),
-      year: registrationData.year.trim(),
-      course: registrationData.course.trim(),
-      isTeamRegistration: registrationData.isTeamRegistration || false,
-      teamName: registrationData.teamName?.trim() || null,
-      teamMembers: registrationData.teamMembers || [],
-      paymentStatus: event.isPaid ? 'pending' : 'free',
-      registeredAt: new Date()
-    });
-
-    // Link to user if logged in
-    try {
-      const user = await authenticate(req);
-      registration.user = user._id;
-    } catch (e) {
-      // Not logged in, that's fine for public registration
-    }
-
-    await registration.save();
-
-    // 6. Update event registration count
-    await Event.findByIdAndUpdate(event._id, {
-      $inc: { registrationCount: 1 }
-    });
-
-    return res.status(201).json({
-      success: true,
-      message: 'Registration successful!',
-      registration: {
-        id: registration._id,
-        name: registration.name,
-        eventTitle: event.title
-      }
-    });
-  },
+  // Alias for /api/register?eventId=...
+  'POST /register': handleRegistration,
 
   'GET /events/:id/check-registration': async (req, res) => {
     const { id: eventId } = req.params;
