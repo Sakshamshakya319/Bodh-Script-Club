@@ -1,7 +1,8 @@
-// Consolidated API handler for all routes
+﻿// Consolidated API handler for all routes - Professional Vercel Version
 import connectDB from '../lib/db.js';
 import mongoose from 'mongoose';
-import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 
 // Import all models
 import User from '../models/UserModel.js';
@@ -12,8 +13,6 @@ import Member from '../models/MemberModel.js';
 import Submission from '../models/SubmissionModel.js';
 import Testimonial from '../models/TestimonialModel.js';
 
-import jwt from 'jsonwebtoken';
-
 // CORS headers helper
 function setCORSHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -21,1667 +20,490 @@ function setCORSHeaders(res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }
 
-// Auth middleware
-function verifyToken(req) {
+// Auth middleware helper
+async function authenticate(req) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new Error('No token provided');
+    throw new Error('Authentication required');
   }
   
-  const token = authHeader.substring(7);
-  return jwt.verify(token, process.env.JWT_SECRET);
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.userId || decoded.id);
+    if (!user) throw new Error('User not found');
+    return user;
+  } catch (error) {
+    throw new Error('Invalid or expired token');
+  }
+}
+
+// Admin check helper
+async function checkAdmin(req) {
+  const user = await authenticate(req);
+  if (!user.isAdmin && user.role !== 'admin') {
+    throw new Error('Admin access required');
+  }
+  return user;
 }
 
 // Route handlers
 const handlers = {
-  // Health check
-  'GET /health': async (req, res) => {
+  // --- AUTH ROUTES ---
+  
+  'POST /auth/login': async (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user || !(await user.comparePassword(password))) {
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    const token = jwt.sign(
+      { userId: user._id, email: user.email, role: user.role, isAdmin: user.isAdmin },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
     res.status(200).json({
-      status: 'OK',
-      timestamp: new Date().toISOString(),
-      environment: process.env.NODE_ENV || 'unknown',
-      nodeVersion: process.version,
-      vercel: true,
-      message: 'Consolidated API is working'
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isAdmin: user.isAdmin
+      }
     });
   },
 
-  // Create admin
-  'POST /create-admin': async (req, res) => {
-    await connectDB();
+  'POST /auth/signup': async (req, res) => {
+    const { name, email, password, registrationNumber, phone, stream, section, session } = req.body;
     
-    const adminData = {
-      name: 'Admin',
-      email: 'admin@bodhscriptclub.com',
-      password: 'Admin@123!',
-      role: 'admin',
-      isAdmin: true,
-      registrationNumber: 'ADMIN001',
-      stream: 'Administration',
-      session: '2024-25',
-      phone: '+91-9999999999',
-      section: 'ADMIN'
-    };
-
-    const existingAdmin = await User.findOne({ email: adminData.email });
-    
-    if (existingAdmin) {
-      const passwordMatch = await existingAdmin.comparePassword('Admin@123!');
-      return res.status(200).json({
-        status: 'exists',
-        message: 'Admin user already exists',
-        admin: {
-          email: existingAdmin.email,
-          name: existingAdmin.name,
-          role: existingAdmin.role,
-          isAdmin: existingAdmin.isAdmin,
-          createdAt: existingAdmin.createdAt
-        },
-        passwordTest: passwordMatch ? 'PASS' : 'FAIL',
-        credentials: {
-          email: 'admin@bodhscriptclub.com',
-          password: 'Admin@123!'
-        }
-      });
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: 'Email already registered' });
     }
 
-    const admin = new User(adminData);
-    await admin.save();
+    const user = new User({
+      name,
+      email,
+      password,
+      registrationNumber,
+      phone,
+      stream,
+      section,
+      session
+    });
+
+    await user.save();
+
+    const token = jwt.sign(
+      { userId: user._id, email: user.email, role: user.role, isAdmin: user.isAdmin },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
 
     res.status(201).json({
-      status: 'created',
-      message: 'Admin user created successfully',
-      admin: {
-        email: admin.email,
-        name: admin.name,
-        role: admin.role,
-        isAdmin: admin.isAdmin,
-        createdAt: admin.createdAt
-      },
-      credentials: {
-        email: 'admin@bodhscriptclub.com',
-        password: 'Admin@123!'
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
       }
     });
   },
 
-  // Auth - Signup
-  'POST /auth/signup': async (req, res) => {
-    await connectDB();
-    
-    try {
-      const { name, email, password } = req.body;
-      
-      // Validation
-      if (!name || !email || !password) {
-        return res.status(400).json({
-          message: 'Name, email, and password are required',
-          error: 'MISSING_FIELDS'
-        });
-      }
-
-      // Password strength validation
-      if (password.length < 6) {
-        return res.status(400).json({
-          message: 'Password must be at least 6 characters long',
-          error: 'WEAK_PASSWORD'
-        });
-      }
-
-      // Check if user already exists
-      const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
-      if (existingUser) {
-        return res.status(400).json({
-          message: 'Email already registered',
-          error: 'EMAIL_EXISTS'
-        });
-      }
-
-      // Create new user
-      const user = new User({
-        name: name.trim(),
-        email: email.toLowerCase().trim(),
-        password: password,
-        role: 'user',
-        isAdmin: false,
-        createdAt: new Date()
-      });
-
-      await user.save();
-
-      // Generate JWT token
-      const payload = {
-        userId: user._id,
-        email: user.email,
-        role: user.role,
-        isAdmin: false
-      };
-
-      const accessToken = jwt.sign(payload, process.env.JWT_SECRET, {
-        expiresIn: '7d',
-        algorithm: 'HS256'
-      });
-
-      res.status(201).json({
-        message: 'Account created successfully',
-        accessToken,
-        tokenType: 'Bearer',
-        expiresIn: '7d',
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          isAdmin: false
-        }
-      });
-    } catch (error) {
-      console.error('Signup error:', error);
-      
-      // Handle duplicate key error
-      if (error.code === 11000) {
-        return res.status(400).json({
-          message: 'Email already registered',
-          error: 'EMAIL_EXISTS'
-        });
-      }
-      
-      res.status(500).json({
-        message: 'Failed to create account',
-        error: error.message
-      });
-    }
-  },
-
-  // Auth - Login
-  'POST /auth/login': async (req, res) => {
-    await connectDB();
-    
-    const { email, password } = req.body;
-    
-    if (!email || !password) {
-      return res.status(400).json({
-        message: 'Email and password are required',
-        error: 'MISSING_CREDENTIALS'
-      });
-    }
-
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
-    if (!user) {
-      return res.status(401).json({
-        message: 'Invalid credentials',
-        error: 'INVALID_CREDENTIALS'
-      });
-    }
-
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({
-        message: 'Invalid credentials',
-        error: 'INVALID_CREDENTIALS'
-      });
-    }
-
-    const payload = {
-      userId: user._id,
+  'GET /auth/me': async (req, res) => {
+    const user = await authenticate(req);
+    res.status(200).json({
+      id: user._id,
+      name: user.name,
       email: user.email,
       role: user.role,
-      isAdmin: user.role === 'admin' || user.isAdmin
-    };
-
-    const accessToken = jwt.sign(payload, process.env.JWT_SECRET, {
-      expiresIn: '7d',
-      algorithm: 'HS256'
-    });
-
-    res.status(200).json({
-      message: 'Login successful',
-      accessToken,
-      tokenType: 'Bearer',
-      expiresIn: '7d',
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        isAdmin: user.role === 'admin' || user.isAdmin
-      }
+      isAdmin: user.isAdmin
     });
   },
 
-  // Auth - Me
-  'GET /auth/me': async (req, res) => {
-    await connectDB();
-    
-    const decoded = verifyToken(req);
-    const user = await User.findById(decoded.userId).select('-password');
-    
-    if (!user) {
-      return res.status(401).json({
-        message: 'User not found',
-        error: 'USER_NOT_FOUND'
-      });
-    }
+  // --- EVENT ROUTES ---
 
-    res.status(200).json({
-      message: 'User verified',
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        isAdmin: user.role === 'admin' || user.isAdmin
-      }
-    });
-  },
-
-  // About
-  'GET /about': async (req, res) => {
-    res.status(200).json({
-      title: "About Bodh Script Club",
-      description: "We are a community of tech enthusiasts, coders, and innovators dedicated to learning and growing together.",
-      mission: "To foster a collaborative environment where students can enhance their programming skills and work on innovative projects.",
-      vision: "To become the leading tech community in our institution, inspiring the next generation of developers.",
-      values: ["Innovation", "Collaboration", "Learning", "Excellence"],
-      founded: "2024",
-      members: "50+",
-      projects: "25+",
-      events: "15+"
-    });
-  },
-
-  // Events
   'GET /events': async (req, res) => {
-    await connectDB();
-    
-    try {
-      const events = await Event.find().sort({ createdAt: -1 });
-      res.status(200).json(events);
-    } catch (error) {
-      console.error('Error fetching events:', error);
-      res.status(500).json({
-        message: 'Failed to fetch events',
-        error: error.message
-      });
-    }
+    const events = await Event.find().sort({ date: -1 });
+    res.status(200).json(events);
   },
 
-  // Events - Get single event by ID
   'GET /events/:id': async (req, res) => {
-    await connectDB();
-    
-    try {
-      const { id } = req.params;
-      let event;
-      
-      // Try to find by slug first, then by ID
-      // Check if id looks like a MongoDB ObjectId (24 hex characters)
-      const isObjectId = /^[0-9a-fA-F]{24}$/.test(id);
-      
-      if (isObjectId) {
-        // Try finding by ID first
-        event = await Event.findById(id);
-      }
-      
-      // If not found by ID or not an ObjectId, try finding by slug
-      if (!event) {
-        event = await Event.findOne({ slug: id });
-      }
-      
-      if (!event) {
-        return res.status(404).json({
-          message: 'Event not found'
-        });
-      }
-      
-      res.status(200).json(event);
-    } catch (error) {
-      console.error('Error fetching event:', error);
-      res.status(500).json({
-        message: 'Failed to fetch event',
-        error: error.message
-      });
-    }
-  },
-
-  // Gallery
-  'GET /gallery': async (req, res) => {
-    await connectDB();
-    
-    try {
-      const gallery = await Gallery.find().sort({ createdAt: -1 });
-      res.status(200).json(gallery);
-    } catch (error) {
-      console.error('Error fetching gallery:', error);
-      res.status(500).json({
-        message: 'Failed to fetch gallery',
-        error: error.message
-      });
-    }
-  },
-
-  // Members
-  'GET /members': async (req, res) => {
-    await connectDB();
-    
-    try {
-      const members = await Member.find().sort({ order: 1, createdAt: -1 });
-      res.status(200).json(members);
-    } catch (error) {
-      console.error('Error fetching members:', error);
-      res.status(500).json({
-        message: 'Failed to fetch members',
-        error: error.message
-      });
-    }
-  },
-
-  // Testimonials
-  'GET /testimonials': async (req, res) => {
-    await connectDB();
-    
-    try {
-      const testimonials = await Testimonial.find({ status: 'approved' })
-        .sort({ createdAt: -1 })
-        .limit(10);
-      
-      res.status(200).json(testimonials);
-    } catch (error) {
-      console.error('Error fetching approved testimonials:', error);
-      res.status(500).json({
-        message: 'Failed to fetch testimonials',
-        error: error.message
-      });
-    }
-  },
-
-  // Submit testimonial
-  'POST /testimonials/submit': async (req, res) => {
-    await connectDB();
-    
-    const { name, email, role, message, rating } = req.body;
-    
-    if (!name || !email || !message) {
-      return res.status(400).json({
-        message: 'Name, email, and message are required'
-      });
-    }
-
-    try {
-      const testimonial = new Testimonial({
-        name,
-        email,
-        role: role || 'Student',
-        message,
-        rating: rating || 5,
-        status: 'pending',
-        createdAt: new Date()
-      });
-
-      await testimonial.save();
-
-      res.status(200).json({
-        message: 'Testimonial submitted successfully! It will be reviewed before publishing.',
-        testimonial: {
-          name,
-          email,
-          role: role || 'Student',
-          message,
-          rating: rating || 5,
-          status: 'pending',
-          submittedAt: new Date().toISOString()
-        }
-      });
-    } catch (error) {
-      console.error('Error saving testimonial:', error);
-      res.status(500).json({
-        message: 'Failed to submit testimonial',
-        error: error.message
-      });
-    }
-  },
-
-  // Testimonials - Get all (for admin)
-  'GET /testimonials/all': async (req, res) => {
-    await connectDB();
-    
-    try {
-      const testimonials = await Testimonial.find().sort({ createdAt: -1 });
-      res.status(200).json(testimonials);
-    } catch (error) {
-      console.error('Error fetching testimonials:', error);
-      res.status(500).json({
-        message: 'Failed to fetch testimonials',
-        error: error.message
-      });
-    }
-  },
-
-  // Testimonials - Update
-  'PUT /testimonials/:id': async (req, res) => {
-    await connectDB();
-    
     const { id } = req.params;
-    const { status } = req.body;
+    let event;
     
-    try {
-      const testimonial = await Testimonial.findByIdAndUpdate(
-        id,
-        { status, updatedAt: new Date() },
-        { new: true }
-      );
-
-      if (!testimonial) {
-        return res.status(404).json({ message: 'Testimonial not found' });
-      }
-
-      res.status(200).json({
-        message: 'Testimonial updated successfully',
-        testimonial
-      });
-    } catch (error) {
-      console.error('Error updating testimonial:', error);
-      res.status(500).json({
-        message: 'Failed to update testimonial',
-        error: error.message
-      });
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      event = await Event.findById(id);
     }
+    
+    if (!event) {
+      event = await Event.findOne({ slug: id });
+    }
+    
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+    res.status(200).json(event);
   },
 
-  // Testimonials - Delete
-  'DELETE /testimonials/:id': async (req, res) => {
-    await connectDB();
-    
-    const { id } = req.params;
-    
-    try {
-      const testimonial = await Testimonial.findByIdAndDelete(id);
-
-      if (!testimonial) {
-        return res.status(404).json({ message: 'Testimonial not found' });
-      }
-
-      res.status(200).json({
-        message: 'Testimonial deleted successfully',
-        id
-      });
-    } catch (error) {
-      console.error('Error deleting testimonial:', error);
-      res.status(500).json({
-        message: 'Failed to delete testimonial',
-        error: error.message
-      });
-    }
-  },
-
-  // Submissions - Get all
-  'GET /submissions': async (req, res) => {
-    await connectDB();
-    
-    try {
-      const submissions = await Submission.find().sort({ createdAt: -1 });
-      res.status(200).json(submissions);
-    } catch (error) {
-      console.error('Error fetching submissions:', error);
-      res.status(500).json({
-        message: 'Failed to fetch submissions',
-        error: error.message
-      });
-    }
-  },
-
-  // Submissions - Check registration
-  'GET /submissions/check/:regNo': async (req, res) => {
-    await connectDB();
-    
-    const { regNo } = req.params;
-    
-    try {
-      // Check if registration number exists in database
-      const existingSubmission = await Submission.findOne({ 
-        registrationNumber: regNo.trim().toUpperCase() 
-      });
-      
-      if (existingSubmission) {
-        return res.status(200).json({
-          exists: true,
-          registrationNumber: regNo,
-          message: 'Registration number already exists',
-          submission: {
-            name: existingSubmission.name,
-            email: existingSubmission.email,
-            status: existingSubmission.status,
-            submittedAt: existingSubmission.createdAt
-          }
-        });
-      }
-      
-      res.status(200).json({
-        exists: false,
-        registrationNumber: regNo,
-        message: 'Registration number available'
-      });
-    } catch (error) {
-      console.error('Error checking registration:', error);
-      res.status(500).json({
-        message: 'Failed to check registration',
-        error: error.message
-      });
-    }
-  },
-
-  // Submissions - Export
-  'GET /submissions/export': async (req, res) => {
-    await connectDB();
-    
-    try {
-      const submissions = await Submission.find().sort({ createdAt: -1 });
-      
-      console.log(`Exporting ${submissions.length} submissions to CSV`);
-      
-      // Create CSV header with all fields
-      const csvHeader = 'Name,Email,Registration Number,Phone,WhatsApp,Course,Section,Year,Batch,GitHub,Status,Submitted At\n';
-      
-      // Create CSV rows with proper escaping
-      const csvRows = submissions.map(sub => {
-        // Helper function to escape CSV values
-        const escapeCSV = (value) => {
-          if (!value) return '""';
-          const stringValue = String(value);
-          // Escape double quotes by doubling them
-          const escaped = stringValue.replace(/"/g, '""');
-          // Wrap in quotes if contains comma, newline, or quote
-          if (escaped.includes(',') || escaped.includes('\n') || escaped.includes('"')) {
-            return `"${escaped}"`;
-          }
-          return `"${escaped}"`;
-        };
-        
-        return [
-          escapeCSV(sub.name || ''),
-          escapeCSV(sub.email || ''),
-          escapeCSV(sub.registrationNumber || ''),
-          escapeCSV(sub.phone || ''),
-          escapeCSV(sub.whatsapp || ''),
-          escapeCSV(sub.course || ''),
-          escapeCSV(sub.section || ''),
-          escapeCSV(sub.year || ''),
-          escapeCSV(sub.batch || ''),
-          escapeCSV(sub.github || ''),
-          escapeCSV(sub.status || 'pending'),
-          escapeCSV(sub.createdAt ? new Date(sub.createdAt).toLocaleString('en-US', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true
-          }) : '')
-        ].join(',');
-      }).join('\n');
-      
-      // Add UTF-8 BOM for Excel compatibility
-      const BOM = '\uFEFF';
-      const csvData = BOM + csvHeader + csvRows;
-      
-      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename="join-requests-${new Date().toISOString().split('T')[0]}.csv"`);
-      res.status(200).send(csvData);
-      
-      console.log('CSV export successful');
-    } catch (error) {
-      console.error('Error exporting submissions:', error);
-      res.status(500).json({
-        message: 'Failed to export submissions',
-        error: error.message
-      });
-    }
-  },
-
-  // Submissions - Update status
-  'PUT /submissions/:id': async (req, res) => {
-    await connectDB();
-    
-    const { id } = req.params;
-    const { status } = req.body;
-    
-    try {
-      const submission = await Submission.findByIdAndUpdate(
-        id,
-        { status, updatedAt: new Date() },
-        { new: true }
-      );
-
-      if (!submission) {
-        return res.status(404).json({ message: 'Submission not found' });
-      }
-
-      res.status(200).json({
-        message: 'Submission status updated successfully',
-        submission
-      });
-    } catch (error) {
-      console.error('Error updating submission:', error);
-      res.status(500).json({
-        message: 'Failed to update submission',
-        error: error.message
-      });
-    }
-  },
-
-  // Events - Create
   'POST /events': async (req, res) => {
-    await connectDB();
-    
-    const eventData = req.body;
-    
-    try {
-      const event = new Event({
-        ...eventData,
-        createdAt: new Date()
-      });
-
-      await event.save();
-
-      res.status(201).json({
-        message: 'Event created successfully',
-        event
-      });
-    } catch (error) {
-      console.error('Error creating event:', error);
-      res.status(500).json({
-        message: 'Failed to create event',
-        error: error.message
-      });
-    }
+    await checkAdmin(req);
+    const event = new Event(req.body);
+    await event.save();
+    res.status(201).json(event);
   },
 
-  // Events - Update
   'PUT /events/:id': async (req, res) => {
-    await connectDB();
-    
-    const { id } = req.params;
-    const eventData = req.body;
-    
-    try {
-      // Find event by slug or ObjectId
-      let event;
-      if (mongoose.Types.ObjectId.isValid(id)) {
-        event = await Event.findByIdAndUpdate(
-          id,
-          { ...eventData, updatedAt: new Date() },
-          { new: true }
-        );
-      }
-      
-      if (!event) {
-        // Try finding by slug and update
-        event = await Event.findOneAndUpdate(
-          { slug: id },
-          { ...eventData, updatedAt: new Date() },
-          { new: true }
-        );
-      }
-
-      if (!event) {
-        return res.status(404).json({ message: 'Event not found' });
-      }
-
-      res.status(200).json({
-        message: 'Event updated successfully',
-        event
-      });
-    } catch (error) {
-      console.error('Error updating event:', error);
-      res.status(500).json({
-        message: 'Failed to update event',
-        error: error.message
-      });
-    }
+    await checkAdmin(req);
+    const event = await Event.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!event) return res.status(404).json({ message: 'Event not found' });
+    res.status(200).json(event);
   },
 
-  // Events - Delete
   'DELETE /events/:id': async (req, res) => {
-    await connectDB();
-    
-    const { id } = req.params;
-    
-    try {
-      // Find and delete by slug or ObjectId
-      let event;
-      if (mongoose.Types.ObjectId.isValid(id)) {
-        event = await Event.findByIdAndDelete(id);
-      }
-      
-      if (!event) {
-        event = await Event.findOneAndDelete({ slug: id });
-      }
-
-      if (!event) {
-        return res.status(404).json({ message: 'Event not found' });
-      }
-
-      res.status(200).json({
-        message: 'Event deleted successfully',
-        id
-      });
-    } catch (error) {
-      console.error('Error deleting event:', error);
-      res.status(500).json({
-        message: 'Failed to delete event',
-        error: error.message
-      });
-    }
+    await checkAdmin(req);
+    const event = await Event.findByIdAndDelete(req.params.id);
+    if (!event) return res.status(404).json({ message: 'Event not found' });
+    res.status(200).json({ message: 'Event deleted successfully' });
   },
 
-  // Event Registration - Register for event
+  // CRITICAL: Event Registration Handler
   'POST /events/:id/register': async (req, res) => {
-    console.log('🎯 [REGISTRATION] Starting event registration...');
+    const { id: eventId } = req.params;
+    const registrationData = req.body;
+
+    console.log(`🎯 [REGISTRATION] Registering for event: ${eventId}`);
+
+    // 1. Find the event
+    let event;
+    if (mongoose.Types.ObjectId.isValid(eventId)) {
+      event = await Event.findById(eventId);
+    }
+    if (!event) {
+      event = await Event.findOne({ slug: eventId });
+    }
     
-    try {
-      await connectDB();
-      console.log('✅ [REGISTRATION] Database connected');
-      
-      const { id } = req.params;
-      const registrationData = req.body;
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
 
-      console.log(`📝 [REGISTRATION] Event ID/Slug: ${id}`);
-      console.log(`📝 [REGISTRATION] Registration Data:`, {
-        name: registrationData.name,
-        registrationNo: registrationData.registrationNo,
-        phoneNumber: registrationData.phoneNumber,
-        course: registrationData.course
-      });
-
-      // Validate required fields
-      const requiredFields = ['name', 'registrationNo', 'phoneNumber', 'course', 'section', 'year', 'department'];
-      const missingFields = requiredFields.filter(field => !registrationData[field]);
-      
-      if (missingFields.length > 0) {
-        console.log(`❌ [REGISTRATION] Missing fields: ${missingFields.join(', ')}`);
-        return res.status(400).json({ 
-          message: `Missing required fields: ${missingFields.join(', ')}`,
-          missingFields
-        });
-      }
-
-      // Check if event exists - support both slug and ObjectId
-      let event;
-      const isObjectId = mongoose.Types.ObjectId.isValid(id);
-      console.log(`🔍 [REGISTRATION] Is valid ObjectId: ${isObjectId}`);
-      
-      if (isObjectId) {
-        console.log('🔍 [REGISTRATION] Trying to find event by ObjectId...');
-        event = await Event.findById(id);
-      }
-      
-      if (!event) {
-        console.log('🔍 [REGISTRATION] Trying to find event by slug...');
-        event = await Event.findOne({ slug: id });
-      }
-      
-      if (!event) {
-        console.log(`❌ [REGISTRATION] Event not found with ID/slug: ${id}`);
-        return res.status(404).json({ message: 'Event not found' });
-      }
-
-      console.log(`✅ [REGISTRATION] Event found: ${event.title} (ID: ${event._id})`);
-
-      // Check if event is paid (should go through payment flow)
-      if (event.isPaid && event.price > 0) {
-        console.log(`💰 [REGISTRATION] Event is paid (₹${event.price}), redirecting to payment`);
-        return res.status(400).json({ 
-          message: 'This is a paid event. Please complete payment first.',
-          requiresPayment: true,
-          price: event.price
-        });
-      }
-
-      // Check if already registered with this registration number for this event
-      console.log(`🔍 [REGISTRATION] Checking for duplicate registration...`);
-      const existingRegistration = await EventRegistration.findOne({
-        event: event._id,
-        registrationNo: registrationData.registrationNo.trim().toUpperCase()
-      });
-
-      if (existingRegistration) {
-        console.log(`❌ [REGISTRATION] Duplicate registration found`);
-        return res.status(400).json({ 
-          message: 'This registration number is already registered for this event',
-          error: 'DUPLICATE_REGISTRATION'
-        });
-      }
-
-      // For hackathons, validate team requirements
-      if (event.eventType === 'hackathon' && event.teamSettings?.enabled) {
-        console.log(`👥 [REGISTRATION] Validating hackathon team requirements...`);
-        
-        if (!registrationData.teamName) {
-          return res.status(400).json({ message: 'Team name is required for hackathon registration' });
-        }
-
-        const teamSize = (registrationData.teamMembers?.length || 0) + 1; // +1 for leader
-        const minSize = event.teamSettings.minTeamSize || 1;
-        const maxSize = event.teamSettings.maxTeamSize || 4;
-
-        console.log(`👥 [REGISTRATION] Team size: ${teamSize}, Min: ${minSize}, Max: ${maxSize}`);
-
-        if (teamSize < minSize || teamSize > maxSize) {
-          return res.status(400).json({ 
-            message: `Team must have between ${minSize} and ${maxSize} members (including team leader)` 
-          });
-        }
-
-        // Validate team member data
-        if (registrationData.teamMembers && registrationData.teamMembers.length > 0) {
-          for (const member of registrationData.teamMembers) {
-            if (!member.name || !member.registrationNo || !member.phoneNumber || !member.course) {
-              return res.status(400).json({ 
-                message: 'All team members must have name, registration number, phone, and course' 
-              });
-            }
-          }
-        }
-      }
-
-      // Create registration for free event (no user authentication required)
-      console.log(`💾 [REGISTRATION] Creating registration record...`);
-      const registration = new EventRegistration({
-        event: event._id,
-        user: null, // No user required for public registration
-        name: registrationData.name.trim(),
-        registrationNo: registrationData.registrationNo.trim().toUpperCase(),
-        phoneNumber: registrationData.phoneNumber.trim(),
-        whatsappNumber: registrationData.whatsappNumber?.trim() || registrationData.phoneNumber.trim(),
-        section: registrationData.section.trim(),
-        department: registrationData.department.trim(),
-        year: registrationData.year.trim(),
-        course: registrationData.course.trim(),
-        // Team registration fields
-        isTeamRegistration: registrationData.isTeamRegistration || false,
-        teamName: registrationData.teamName?.trim() || null,
-        teamMembers: registrationData.teamMembers || [],
-        paymentStatus: 'free',
-        registeredAt: new Date()
-      });
-
-      await registration.save();
-      console.log(`✅ [REGISTRATION] Registration saved with ID: ${registration._id}`);
-
-      // Update event registration count
-      console.log(`📊 [REGISTRATION] Updating event registration count...`);
-      await Event.findByIdAndUpdate(event._id, {
-        $inc: { registrationCount: 1 }
-      });
-      console.log(`✅ [REGISTRATION] Event registration count updated`);
-
-      console.log(`🎉 [REGISTRATION] Registration completed successfully!`);
-      res.status(201).json({
-        success: true,
-        message: 'Registration successful! You will receive confirmation shortly.',
-        registration: {
-          id: registration._id,
-          name: registration.name,
-          registrationNo: registration.registrationNo,
-          event: {
-            id: event._id,
-            title: event.title,
-            date: event.date
-          }
-        }
-      });
-    } catch (error) {
-      console.error('❌ [REGISTRATION] Error:', error.name);
-      console.error('❌ [REGISTRATION] Message:', error.message);
-      console.error('❌ [REGISTRATION] Stack:', error.stack);
-      
-      // Send detailed error response
-      res.status(500).json({
-        success: false,
-        message: 'Failed to register for event. Please try again.',
-        error: error.message,
-        errorType: error.name,
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    // 2. Validate required fields
+    const requiredFields = ['name', 'registrationNo', 'phoneNumber', 'course', 'section', 'year', 'department'];
+    const missingFields = requiredFields.filter(field => !registrationData[field]);
+    
+    if (missingFields.length > 0) {
+      return res.status(400).json({ 
+        message: `Missing required fields: ${missingFields.join(', ')}`,
+        missingFields
       });
     }
-  },
 
-  // Event Registration - Get registrations for an event (Admin)
-  'GET /events/:id/registrations': async (req, res) => {
-    await connectDB();
-    
-    try {
-      const decoded = verifyToken(req);
-      const { id } = req.params;
+    // 3. Check for duplicate registration
+    const existingRegistration = await EventRegistration.findOne({
+      event: event._id,
+      registrationNo: registrationData.registrationNo.trim().toUpperCase()
+    });
 
-      console.log(`📋 Fetching registrations for event: ${id}`);
-      console.log(`🔍 Checking if ID is valid ObjectId: ${mongoose.Types.ObjectId.isValid(id)}`);
-
-      // Check if user is admin
-      if (decoded.role !== 'admin' && !decoded.isAdmin) {
-        console.log('❌ Access denied - user is not admin');
-        return res.status(403).json({ message: 'Access denied' });
-      }
-
-      // Find event by slug or ObjectId to get the actual _id
-      let event;
-      if (mongoose.Types.ObjectId.isValid(id)) {
-        console.log('🔍 Trying to find event by ObjectId...');
-        event = await Event.findById(id);
-      }
-      if (!event) {
-        console.log('🔍 Trying to find event by slug...');
-        event = await Event.findOne({ slug: id });
-      }
-      
-      if (!event) {
-        console.log('❌ Event not found');
-        return res.status(404).json({ message: 'Event not found' });
-      }
-
-      console.log(`✅ Event found: ${event.title} (ID: ${event._id})`);
-
-      // Fetch registrations using the event's ObjectId
-      const registrations = await EventRegistration.find({ event: event._id })
-        .populate({
-          path: 'user',
-          select: 'name email',
-          options: { strictPopulate: false }
-        })
-        .lean()
-        .sort({ registeredAt: -1 });
-
-      console.log(`✅ Found ${registrations.length} registrations`);
-
-      // Transform data to ensure all fields are present
-      const transformedRegistrations = registrations.map(reg => ({
-        _id: reg._id,
-        name: reg.name || 'N/A',
-        registrationNo: reg.registrationNo || 'N/A',
-        phoneNumber: reg.phoneNumber || 'N/A',
-        whatsappNumber: reg.whatsappNumber || reg.phoneNumber || 'N/A',
-        course: reg.course || 'N/A',
-        section: reg.section || 'N/A',
-        year: reg.year || 'N/A',
-        department: reg.department || 'N/A',
-        paymentStatus: reg.paymentStatus || 'free',
-        registeredAt: reg.registeredAt,
-        // Team registration fields
-        isTeamRegistration: reg.isTeamRegistration || false,
-        teamName: reg.teamName || null,
-        teamMembers: reg.teamMembers || [],
-        user: reg.user || null
-      }));
-
-      res.status(200).json({
-        success: true,
-        count: transformedRegistrations.length,
-        registrations: transformedRegistrations
-      });
-    } catch (error) {
-      console.error('❌ Error fetching registrations:', error);
-      res.status(500).json({
-        message: 'Failed to fetch registrations',
-        error: error.message,
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    if (existingRegistration) {
+      return res.status(400).json({ 
+        message: 'You have already registered for this event with this registration number.',
+        error: 'DUPLICATE_REGISTRATION'
       });
     }
-  },
 
-  // Event Registration - Export registrations to CSV (Admin)
-  'GET /events/:id/registrations/export': async (req, res) => {
-    await connectDB();
-    
-    try {
-      const decoded = verifyToken(req);
-      const { id } = req.params;
+    // 4. Handle team registration for hackathons
+    if (event.eventType === 'hackathon' && registrationData.isTeamRegistration) {
+      const teamSize = (registrationData.teamMembers?.length || 0) + 1;
+      const minSize = event.teamSettings?.minTeamSize || 1;
+      const maxSize = event.teamSettings?.maxTeamSize || 4;
 
-      // Check if user is admin
-      if (decoded.role !== 'admin' && !decoded.isAdmin) {
-        return res.status(403).json({ message: 'Access denied' });
+      if (teamSize < minSize || teamSize > maxSize) {
+        return res.status(400).json({ 
+          message: `Team size must be between ${minSize} and ${maxSize} members.` 
+        });
       }
-
-      // Find event by slug or ObjectId
-      let event;
-      if (mongoose.Types.ObjectId.isValid(id)) {
-        event = await Event.findById(id);
-      }
-      if (!event) {
-        event = await Event.findOne({ slug: id });
-      }
-      
-      if (!event) {
-        return res.status(404).json({ message: 'Event not found' });
-      }
-
-      const registrations = await EventRegistration.find({ event: event._id })
-        .populate({
-          path: 'user',
-          select: 'name email',
-          options: { strictPopulate: false }
-        })
-        .lean()
-        .sort({ registeredAt: -1 });
-
-      console.log(`Exporting ${registrations.length} registrations for event: ${event.title}`);
-
-      const escapeCSV = (value) => {
-        if (!value) return '""';
-        const stringValue = String(value);
-        const escaped = stringValue.replace(/"/g, '""');
-        if (escaped.includes(',') || escaped.includes('\n') || escaped.includes('"')) {
-          return `"${escaped}"`;
-        }
-        return `"${escaped}"`;
-      };
-
-      // Check if this is a hackathon with team registrations
-      const isHackathon = event.eventType === 'hackathon';
-      const hasTeamRegistrations = registrations.some(reg => reg.isTeamRegistration);
-
-      let csvData;
-
-      if (isHackathon && hasTeamRegistrations) {
-        // Hackathon CSV with team details
-        const csvHeader = 'Team Name,Team Leader Name,Leader Reg No,Leader Phone,Leader WhatsApp,Leader Course,Leader Section,Leader Year,Leader Department,Member 2 Name,Member 2 Reg No,Member 2 Phone,Member 2 Course,Member 3 Name,Member 3 Reg No,Member 3 Phone,Member 3 Course,Member 4 Name,Member 4 Reg No,Member 4 Phone,Member 4 Course,Registered At\n';
-
-        const csvRows = registrations.map(reg => {
-          const row = [
-            escapeCSV(reg.teamName || 'N/A'),
-            escapeCSV(reg.name || 'N/A'),
-            escapeCSV(reg.registrationNo || 'N/A'),
-            escapeCSV(reg.phoneNumber || 'N/A'),
-            escapeCSV(reg.whatsappNumber || reg.phoneNumber || 'N/A'),
-            escapeCSV(reg.course || 'N/A'),
-            escapeCSV(reg.section || 'N/A'),
-            escapeCSV(reg.year || 'N/A'),
-            escapeCSV(reg.department || 'N/A')
-          ];
-
-          // Add team members (up to 3 additional members)
-          const teamMembers = reg.teamMembers || [];
-          for (let i = 0; i < 3; i++) {
-            if (teamMembers[i]) {
-              row.push(
-                escapeCSV(teamMembers[i].name || 'N/A'),
-                escapeCSV(teamMembers[i].registrationNo || 'N/A'),
-                escapeCSV(teamMembers[i].phoneNumber || 'N/A'),
-                escapeCSV(teamMembers[i].course || 'N/A')
-              );
-            } else {
-              row.push('""', '""', '""', '""');
-            }
-          }
-
-          // Add registration date
-          row.push(escapeCSV(reg.registeredAt ? new Date(reg.registeredAt).toLocaleString('en-US', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true
-          }) : 'N/A'));
-
-          return row.join(',');
-        }).join('\n');
-
-        csvData = csvHeader + csvRows;
-      } else {
-        // Regular event CSV (non-hackathon or no team registrations)
-        const csvHeader = 'Registration No,Name,Phone Number,WhatsApp,Course,Section,Year,Department,Registered At\n';
-
-        const csvRows = registrations.map(reg => {
-          return [
-            escapeCSV(reg.registrationNo || 'N/A'),
-            escapeCSV(reg.name || 'N/A'),
-            escapeCSV(reg.phoneNumber || 'N/A'),
-            escapeCSV(reg.whatsappNumber || reg.phoneNumber || 'N/A'),
-            escapeCSV(reg.course || 'N/A'),
-            escapeCSV(reg.section || 'N/A'),
-            escapeCSV(reg.year || 'N/A'),
-            escapeCSV(reg.department || 'N/A'),
-            escapeCSV(reg.registeredAt ? new Date(reg.registeredAt).toLocaleString('en-US', {
-              year: 'numeric',
-              month: '2-digit',
-              day: '2-digit',
-              hour: '2-digit',
-              minute: '2-digit',
-              second: '2-digit',
-              hour12: true
-            }) : 'N/A')
-          ].join(',');
-        }).join('\n');
-
-        csvData = csvHeader + csvRows;
-      }
-
-      // Add UTF-8 BOM for Excel compatibility
-      const BOM = '\uFEFF';
-      const finalCSV = BOM + csvData;
-
-      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename="${event.title.replace(/[^a-z0-9]/gi, '-')}-registrations-${new Date().toISOString().split('T')[0]}.csv"`);
-      res.status(200).send(finalCSV);
-
-      console.log('CSV export successful');
-    } catch (error) {
-      console.error('Error exporting registrations:', error);
-      res.status(500).json({
-        message: 'Failed to export registrations',
-        error: error.message
-      });
     }
+
+    // 5. Create the registration
+    const registration = new EventRegistration({
+      event: event._id,
+      name: registrationData.name.trim(),
+      registrationNo: registrationData.registrationNo.trim().toUpperCase(),
+      phoneNumber: registrationData.phoneNumber.trim(),
+      whatsappNumber: registrationData.whatsappNumber?.trim() || registrationData.phoneNumber.trim(),
+      section: registrationData.section.trim(),
+      department: registrationData.department.trim(),
+      year: registrationData.year.trim(),
+      course: registrationData.course.trim(),
+      isTeamRegistration: registrationData.isTeamRegistration || false,
+      teamName: registrationData.teamName?.trim() || null,
+      teamMembers: registrationData.teamMembers || [],
+      paymentStatus: event.isPaid ? 'pending' : 'free',
+      registeredAt: new Date()
+    });
+
+    // Link to user if logged in
+    try {
+      const user = await authenticate(req);
+      registration.user = user._id;
+    } catch (e) {
+      // Not logged in, that's fine for public registration
+    }
+
+    await registration.save();
+
+    // 6. Update event registration count
+    await Event.findByIdAndUpdate(event._id, {
+      $inc: { registrationCount: 1 }
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Registration successful!',
+      registration: {
+        id: registration._id,
+        name: registration.name,
+        eventTitle: event.title
+      }
+    });
   },
 
-  // Event Registration - Check if user is registered
   'GET /events/:id/check-registration': async (req, res) => {
-    await connectDB();
+    const { id: eventId } = req.params;
+    const user = await authenticate(req);
     
-    try {
-      const decoded = verifyToken(req);
-      const { id } = req.params;
-
-      // Find event by slug or ObjectId
-      let event;
-      if (mongoose.Types.ObjectId.isValid(id)) {
-        event = await Event.findById(id);
-      }
-      if (!event) {
-        event = await Event.findOne({ slug: id });
-      }
-      
-      if (!event) {
-        return res.status(404).json({ message: 'Event not found' });
-      }
-
-      const registration = await EventRegistration.findOne({
-        event: event._id,
-        user: decoded.userId
-      });
-
-      res.status(200).json({
-        isRegistered: !!registration,
-        registration: registration || null
-      });
-    } catch (error) {
-      console.error('Error checking registration:', error);
-      res.status(500).json({
-        message: 'Failed to check registration',
-        error: error.message
-      });
+    let event;
+    if (mongoose.Types.ObjectId.isValid(eventId)) {
+      event = await Event.findById(eventId);
+    } else {
+      event = await Event.findOne({ slug: eventId });
     }
+    
+    if (!event) return res.status(404).json({ message: 'Event not found' });
+
+    const registration = await EventRegistration.findOne({
+      event: event._id,
+      user: user._id
+    });
+
+    res.status(200).json({ isRegistered: !!registration, registration });
   },
 
-  // Event Registration - Get user's registrations
   'GET /events/user/registrations': async (req, res) => {
-    await connectDB();
-    
-    try {
-      const decoded = verifyToken(req);
-
-      console.log(`📋 Fetching registrations for user: ${decoded.userId}`);
-
-      const registrations = await EventRegistration.find({ user: decoded.userId })
-        .populate({
-          path: 'event',
-          select: 'title date location image price isPaid',
-          options: { strictPopulate: false }
-        })
-        .lean()
-        .sort({ registeredAt: -1 });
-
-      console.log(`✅ Found ${registrations.length} registrations`);
-
-      // Transform data to ensure all fields are present
-      const transformedRegistrations = registrations.map(reg => ({
-        _id: reg._id,
-        name: reg.name || 'N/A',
-        registrationNo: reg.registrationNo || 'N/A',
-        phoneNumber: reg.phoneNumber || 'N/A',
-        whatsappNumber: reg.whatsappNumber || reg.phoneNumber || 'N/A',
-        course: reg.course || 'N/A',
-        section: reg.section || 'N/A',
-        year: reg.year || 'N/A',
-        department: reg.department || 'N/A',
-        paymentStatus: reg.paymentStatus || 'free',
-        registeredAt: reg.registeredAt,
-        event: reg.event ? {
-          _id: reg.event._id,
-          title: reg.event.title || 'Event',
-          date: reg.event.date,
-          location: reg.event.location || 'TBA',
-          image: reg.event.image,
-          price: reg.event.price || 0,
-          isPaid: reg.event.isPaid || false
-        } : { title: 'Unknown Event' }
-      }));
-
-      res.status(200).json({
-        success: true,
-        count: transformedRegistrations.length,
-        registrations: transformedRegistrations
-      });
-    } catch (error) {
-      console.error('❌ Error fetching user registrations:', error);
-      res.status(500).json({
-        message: 'Failed to fetch registrations',
-        error: error.message,
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
-      });
-    }
+    const user = await authenticate(req);
+    const registrations = await EventRegistration.find({ user: user._id })
+      .populate('event')
+      .sort({ registeredAt: -1 });
+    res.status(200).json(registrations);
   },
 
-  // Members - Create
+  'GET /events/:id/registrations': async (req, res) => {
+    await checkAdmin(req);
+    const registrations = await EventRegistration.find({ event: req.params.id })
+      .sort({ registeredAt: -1 });
+    res.status(200).json(registrations);
+  },
+
+  // --- MEMBER ROUTES ---
+
+  'GET /members': async (req, res) => {
+    const members = await Member.find().sort({ order: 1 });
+    res.status(200).json(members);
+  },
+
   'POST /members': async (req, res) => {
-    await connectDB();
-    
-    const memberData = req.body;
-    
-    try {
-      const member = new Member({
-        ...memberData,
-        createdAt: new Date()
-      });
-
-      await member.save();
-
-      res.status(201).json({
-        message: 'Member added successfully',
-        member
-      });
-    } catch (error) {
-      console.error('Error creating member:', error);
-      res.status(500).json({
-        message: 'Failed to add member',
-        error: error.message
-      });
-    }
+    await checkAdmin(req);
+    const member = new Member(req.body);
+    await member.save();
+    res.status(201).json(member);
   },
 
-  // Members - Update
   'PUT /members/:id': async (req, res) => {
-    await connectDB();
-    
-    const { id } = req.params;
-    const memberData = req.body;
-    
-    try {
-      const member = await Member.findByIdAndUpdate(
-        id,
-        { ...memberData, updatedAt: new Date() },
-        { new: true }
-      );
-
-      if (!member) {
-        return res.status(404).json({ message: 'Member not found' });
-      }
-
-      res.status(200).json({
-        message: 'Member updated successfully',
-        member
-      });
-    } catch (error) {
-      console.error('Error updating member:', error);
-      res.status(500).json({
-        message: 'Failed to update member',
-        error: error.message
-      });
-    }
+    await checkAdmin(req);
+    const member = await Member.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.status(200).json(member);
   },
 
-  // Members - Delete
   'DELETE /members/:id': async (req, res) => {
-    await connectDB();
-    
-    const { id } = req.params;
-    
-    try {
-      const member = await Member.findByIdAndDelete(id);
-
-      if (!member) {
-        return res.status(404).json({ message: 'Member not found' });
-      }
-
-      res.status(200).json({
-        message: 'Member deleted successfully',
-        id
-      });
-    } catch (error) {
-      console.error('Error deleting member:', error);
-      res.status(500).json({
-        message: 'Failed to delete member',
-        error: error.message
-      });
-    }
+    await checkAdmin(req);
+    await Member.findByIdAndDelete(req.params.id);
+    res.status(200).json({ message: 'Member deleted successfully' });
   },
 
-  // Gallery - Create
-  'POST /gallery': async (req, res) => {
-    await connectDB();
-    
-    const galleryData = req.body;
-    
-    try {
-      const gallery = new Gallery({
-        ...galleryData,
-        createdAt: new Date()
-      });
+  // --- SUBMISSION ROUTES ---
 
-      await gallery.save();
-
-      res.status(201).json({
-        message: 'Gallery item created successfully',
-        gallery
-      });
-    } catch (error) {
-      console.error('Error creating gallery item:', error);
-      res.status(500).json({
-        message: 'Failed to create gallery item',
-        error: error.message
-      });
-    }
-  },
-
-  // Gallery - Update
-  'PUT /gallery/:id': async (req, res) => {
-    await connectDB();
-    
-    const { id } = req.params;
-    const galleryData = req.body;
-    
-    try {
-      const gallery = await Gallery.findByIdAndUpdate(
-        id,
-        { ...galleryData, updatedAt: new Date() },
-        { new: true }
-      );
-
-      if (!gallery) {
-        return res.status(404).json({ message: 'Gallery item not found' });
-      }
-
-      res.status(200).json({
-        message: 'Gallery item updated successfully',
-        gallery
-      });
-    } catch (error) {
-      console.error('Error updating gallery item:', error);
-      res.status(500).json({
-        message: 'Failed to update gallery item',
-        error: error.message
-      });
-    }
-  },
-
-  // Gallery - Delete
-  'DELETE /gallery/:id': async (req, res) => {
-    await connectDB();
-    
-    const { id } = req.params;
-    
-    try {
-      const gallery = await Gallery.findByIdAndDelete(id);
-
-      if (!gallery) {
-        return res.status(404).json({ message: 'Gallery item not found' });
-      }
-
-      res.status(200).json({
-        message: 'Gallery item deleted successfully',
-        id
-      });
-    } catch (error) {
-      console.error('Error deleting gallery item:', error);
-      res.status(500).json({
-        message: 'Failed to delete gallery item',
-        error: error.message
-      });
-    }
-  },
-
-  // Submit join request
   'POST /submissions': async (req, res) => {
-    await connectDB();
-    
-    const { name, email, registrationNumber, phone, whatsapp, course, section, year, batch, github } = req.body;
-    
-    if (!name || !email || !registrationNumber) {
-      return res.status(400).json({
-        message: 'Name, email, and registration number are required'
-      });
-    }
-
-    try {
-      // Check if registration number already exists
-      const existingSubmission = await Submission.findOne({ 
-        registrationNumber: registrationNumber.trim().toUpperCase() 
-      });
-      
-      if (existingSubmission) {
-        return res.status(400).json({
-          message: 'Registration number already exists',
-          error: 'DUPLICATE_REGISTRATION',
-          existingSubmission: {
-            name: existingSubmission.name,
-            email: existingSubmission.email,
-            registrationNumber: existingSubmission.registrationNumber,
-            status: existingSubmission.status,
-            submittedAt: existingSubmission.createdAt
-          }
-        });
-      }
-
-      // Check if email already exists
-      const existingEmail = await Submission.findOne({ 
-        email: email.trim().toLowerCase() 
-      });
-      
-      if (existingEmail) {
-        return res.status(400).json({
-          message: 'Email already exists. You have already submitted an application.',
-          error: 'DUPLICATE_EMAIL',
-          existingSubmission: {
-            name: existingEmail.name,
-            email: existingEmail.email,
-            registrationNumber: existingEmail.registrationNumber,
-            status: existingEmail.status,
-            submittedAt: existingEmail.createdAt
-          }
-        });
-      }
-
-      const submission = new Submission({
-        name: name.trim(),
-        email: email.trim().toLowerCase(),
-        registrationNumber: registrationNumber.trim().toUpperCase(),
-        phone: phone?.trim(),
-        whatsapp: whatsapp?.trim(),
-        course: course?.trim(),
-        section: section?.trim(),
-        year: year?.trim(),
-        batch: batch?.trim(),
-        github: github?.trim(),
-        status: 'pending',
-        createdAt: new Date()
-      });
-
-      await submission.save();
-
-      res.status(201).json({
-        message: 'Join request submitted successfully! We will review your application.',
-        submission: {
-          id: submission._id,
-          name: submission.name,
-          email: submission.email,
-          registrationNumber: submission.registrationNumber,
-          status: submission.status,
-          submittedAt: submission.createdAt
-        }
-      });
-    } catch (error) {
-      console.error('Error submitting join request:', error);
-      res.status(500).json({
-        message: 'Failed to submit join request',
-        error: error.message
-      });
-    }
+    const submission = new Submission(req.body);
+    await submission.save();
+    res.status(201).json(submission);
   },
 
-  // Event Gallery - Add image to event gallery
-  'POST /events/:id/gallery': async (req, res) => {
-    await connectDB();
-    
-    try {
-      const decoded = verifyToken(req);
-      const { id } = req.params;
-      const { url, caption } = req.body;
-      
-      // Check if user is admin
-      if (decoded.role !== 'admin' && !decoded.isAdmin) {
-        return res.status(403).json({ message: 'Access denied' });
-      }
-
-      if (!url) {
-        return res.status(400).json({ message: 'Image URL is required' });
-      }
-
-      const event = await Event.findById(id);
-      if (!event) {
-        return res.status(404).json({ message: 'Event not found' });
-      }
-
-      // Add image to gallery
-      event.gallery = event.gallery || [];
-      event.gallery.push({
-        url,
-        caption: caption || '',
-        uploadedAt: new Date()
-      });
-      event.updatedAt = new Date();
-
-      await event.save();
-
-      res.status(200).json({
-        message: 'Image added to gallery successfully',
-        event
-      });
-    } catch (error) {
-      console.error('Error adding image to gallery:', error);
-      res.status(500).json({
-        message: 'Failed to add image to gallery',
-        error: error.message
-      });
-    }
+  'GET /submissions': async (req, res) => {
+    await checkAdmin(req);
+    const submissions = await Submission.find().sort({ createdAt: -1 });
+    res.status(200).json(submissions);
   },
 
-  // Event Gallery - Delete image from event gallery
-  'DELETE /events/:id/gallery/:imageId': async (req, res) => {
-    await connectDB();
-    
-    try {
-      const decoded = verifyToken(req);
-      const { id, imageId } = req.params;
-      
-      // Check if user is admin
-      if (decoded.role !== 'admin' && !decoded.isAdmin) {
-        return res.status(403).json({ message: 'Access denied' });
-      }
-
-      const event = await Event.findById(id);
-      if (!event) {
-        return res.status(404).json({ message: 'Event not found' });
-      }
-
-      // Remove image from gallery
-      event.gallery = event.gallery || [];
-      event.gallery = event.gallery.filter(img => img._id.toString() !== imageId);
-      event.updatedAt = new Date();
-
-      await event.save();
-
-      res.status(200).json({
-        message: 'Image removed from gallery successfully',
-        event
-      });
-    } catch (error) {
-      console.error('Error removing image from gallery:', error);
-      res.status(500).json({
-        message: 'Failed to remove image from gallery',
-        error: error.message
-      });
-    }
+  'PUT /submissions/:id': async (req, res) => {
+    await checkAdmin(req);
+    const submission = await Submission.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.status(200).json(submission);
   },
 
+  // --- GALLERY ROUTES ---
 
+  'GET /gallery': async (req, res) => {
+    const gallery = await Gallery.find().sort({ createdAt: -1 });
+    res.status(200).json(gallery);
+  },
+
+  'POST /gallery': async (req, res) => {
+    await checkAdmin(req);
+    const item = new Gallery(req.body);
+    await item.save();
+    res.status(201).json(item);
+  },
+
+  'DELETE /gallery/:id': async (req, res) => {
+    await checkAdmin(req);
+    await Gallery.findByIdAndDelete(req.params.id);
+    res.status(200).json({ message: 'Gallery item deleted' });
+  },
+
+  // --- TESTIMONIAL ROUTES ---
+
+  'GET /testimonials': async (req, res) => {
+    const testimonials = await Testimonial.find({ status: 'approved' }).sort({ createdAt: -1 });
+    res.status(200).json(testimonials);
+  },
+
+  'GET /testimonials/all': async (req, res) => {
+    await checkAdmin(req);
+    const testimonials = await Testimonial.find().sort({ createdAt: -1 });
+    res.status(200).json(testimonials);
+  },
+
+  'POST /testimonials/submit': async (req, res) => {
+    const testimonial = new Testimonial({ ...req.body, status: 'pending' });
+    await testimonial.save();
+    res.status(201).json({ message: 'Testimonial submitted for approval' });
+  },
+
+  'PUT /testimonials/:id': async (req, res) => {
+    await checkAdmin(req);
+    const testimonial = await Testimonial.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.status(200).json(testimonial);
+  },
+
+  'DELETE /testimonials/:id': async (req, res) => {
+    await checkAdmin(req);
+    await Testimonial.findByIdAndDelete(req.params.id);
+    res.status(200).json({ message: 'Testimonial deleted' });
+  },
+
+  // --- SYSTEM ROUTES ---
+
+  'GET /health': async (req, res) => {
+    res.status(200).json({ 
+      status: 'OK', 
+      timestamp: new Date().toISOString(),
+      mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+    });
+  }
 };
 
+// Main Vercel API Handler
 export default async function handler(req, res) {
   setCORSHeaders(res);
   
+  // Handle preflight
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
   try {
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    const path = url.pathname.replace('/api', '');
-    const route = `${req.method} ${path}`;
+    // 1. Connect to Database
+    await connectDB();
+
+    // 2. Parse URL and Path
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    let path = url.pathname;
     
-    console.log('API Route:', route);
+    // Remove /api prefix if present
+    if (path.startsWith('/api')) {
+      path = path.substring(4);
+    }
     
-    let matchedHandler = handlers[route];
-    
+    // Ensure path starts with /
+    if (!path.startsWith('/')) {
+      path = '/' + path;
+    }
+
+    const routeKey = `${req.method} ${path}`;
+    console.log(`🚀 API Request: ${routeKey}`);
+
+    // 3. Find Matching Handler (with dynamic parameters)
+    let matchedHandler = handlers[routeKey];
+    let params = {};
+
     if (!matchedHandler) {
-      for (const [pattern, patternHandler] of Object.entries(handlers)) {
+      // Try regex matching for routes with parameters (e.g., /events/:id)
+      for (const [pattern, handlerFunc] of Object.entries(handlers)) {
         const [method, patternPath] = pattern.split(' ');
         
         if (method !== req.method) continue;
         
+        // Convert :param to regex capture group
         const regexPattern = patternPath.replace(/:[^/]+/g, '([^/]+)');
         const regex = new RegExp(`^${regexPattern}$`);
         const match = path.match(regex);
         
         if (match) {
+          // Extract parameter names and values
           const paramNames = (patternPath.match(/:[^/]+/g) || []).map(p => p.substring(1));
-          req.params = {};
           paramNames.forEach((name, index) => {
-            req.params[name] = match[index + 1];
+            params[name] = match[index + 1];
           });
           
-          matchedHandler = patternHandler;
+          matchedHandler = handlerFunc;
           break;
         }
       }
     }
-    
-    if (!matchedHandler) {
-      return res.status(404).json({
+
+    // 4. Execute Handler
+    if (matchedHandler) {
+      req.params = params;
+      req.query = Object.fromEntries(url.searchParams);
+      
+      await matchedHandler(req, res);
+    } else {
+      console.log(`❌ No handler found for: ${routeKey}`);
+      res.status(404).json({
         message: 'API endpoint not found',
-        route: route,
         method: req.method,
         path: path,
         availableRoutes: Object.keys(handlers).filter(r => r.startsWith(req.method))
       });
     }
 
-    await matchedHandler(req, res);
-    
   } catch (error) {
-    console.error('API Error:', error);
+    console.error('🔥 API Error:', error);
     
-    if (error.message === 'No token provided' || error.name === 'JsonWebTokenError') {
-      return res.status(401).json({
-        message: 'Authentication required',
-        error: 'INVALID_TOKEN'
-      });
-    }
-    
-    res.status(500).json({
-      message: 'Server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'INTERNAL_ERROR'
+    const statusCode = error.message.includes('Authentication') ? 401 : 
+                       error.message.includes('Admin') ? 403 : 500;
+                       
+    res.status(statusCode).json({
+      message: error.message || 'Internal Server Error',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 }

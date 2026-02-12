@@ -15,12 +15,16 @@
   ],
   "routes": [
     {
-      "src": "/api/register",
-      "dest": "/api/register.js"
+      "src": "/api/health",
+      "dest": "/api/health.js"
     },
     {
-      "src": "/api/test-registration",
-      "dest": "/api/test-registration.js"
+      "src": "/api/create-admin",
+      "dest": "/api/create-admin.js"
+    },
+    {
+      "src": "/api/upload-image",
+      "dest": "/api/upload-image.js"
     },
     {
       "src": "/api/(.*)",

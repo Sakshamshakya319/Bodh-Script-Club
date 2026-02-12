@@ -93,15 +93,13 @@ export const eventsAPI = {
       timeout: 30000,
     });
     
-    // Use dedicated registration endpoint for better reliability
     const maxRetries = 3;
     let lastError;
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         console.log(`🔄 Registration attempt ${attempt}/${maxRetries} for event: ${id}`);
-        // Use dedicated /register endpoint with eventId query parameter
-        const response = await publicApi.post(`/register?eventId=${encodeURIComponent(id)}`, data);
+        const response = await publicApi.post(`/events/${id}/register`, data);
         console.log(`✅ Registration successful on attempt ${attempt}`);
         return response;
       } catch (error) {
@@ -113,7 +111,6 @@ export const eventsAPI = {
           data: error.response?.data
         });
         
-        // Don't retry on client errors (400-499) except 408 (timeout) and 429 (rate limit)
         if (error.response?.status >= 400 && error.response?.status < 500) {
           if (error.response.status !== 408 && error.response.status !== 429) {
             console.log(`⚠️ Client error detected, not retrying`);
@@ -121,7 +118,6 @@ export const eventsAPI = {
           }
         }
         
-        // Wait before retrying (exponential backoff)
         if (attempt < maxRetries) {
           const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
           console.log(`⏳ Waiting ${waitTime}ms before retry...`);
