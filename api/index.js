@@ -197,106 +197,144 @@ const handlers = {
   // --- AUTH ROUTES ---
   
   'POST /auth/login': async (req, res) => {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password are required' });
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ message: 'Email and password are required' });
+      }
+
+      // 1. Find user by email
+      const user = await User.findOne({ email }).select('+password');
+      if (!user) {
+        console.log(`❌ Login failed: User not found (${email})`);
+        return res.status(401).json({ message: 'Invalid email or password' });
+      }
+
+      // 2. Verify password
+      const isMatch = await user.comparePassword(password);
+      if (!isMatch) {
+        console.log(`❌ Login failed: Incorrect password for ${email}`);
+        return res.status(401).json({ message: 'Invalid email or password' });
+      }
+
+      // 3. Generate Token
+      const token = jwt.sign(
+        { userId: user._id, email: user.email, role: user.role, isAdmin: user.isAdmin },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+
+      console.log(`✅ Login successful: ${email} (Admin: ${user.isAdmin || user.role === 'admin'})`);
+
+      res.status(200).json({
+        token,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          isAdmin: user.isAdmin || user.role === 'admin'
+        }
+      });
+    } catch (error) {
+      console.error('🔥 Login Error:', error);
+      res.status(500).json({ message: 'Internal Server Error during login' });
     }
+  },
 
-    const user = await User.findOne({ email });
-    if (!user || !(await user.comparePassword(password))) {
-      return res.status(401).json({ message: 'Invalid email or password' });
+  'POST /auth/signup': async (req, res) => {
+    try {
+      const { name, email, password, registrationNumber, phone, stream, section, session } = req.body;
+      
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return res.status(400).json({ message: 'Email already registered' });
+      }
+
+      const user = new User({
+        name,
+        email,
+        password,
+        registrationNumber,
+        phone,
+        stream,
+        section,
+        session
+      });
+
+      await user.save();
+
+      const token = jwt.sign(
+        { userId: user._id, email: user.email, role: user.role, isAdmin: user.isAdmin },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+
+      res.status(201).json({
+        token,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          isAdmin: user.isAdmin || user.role === 'admin'
+        }
+      });
+    } catch (error) {
+      console.error('🔥 Signup Error:', error);
+      res.status(500).json({ message: 'Internal Server Error during signup' });
     }
+  },
 
-    const token = jwt.sign(
-      { userId: user._id, email: user.email, role: user.role, isAdmin: user.isAdmin },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    res.status(200).json({
-      token,
-      user: {
+  'GET /auth/me': async (req, res) => {
+    try {
+      const user = await authenticate(req);
+      res.status(200).json({
         id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
-        isAdmin: user.isAdmin
-      }
-    });
-  },
-
-  'POST /auth/signup': async (req, res) => {
-    const { name, email, password, registrationNumber, phone, stream, section, session } = req.body;
-    
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: 'Email already registered' });
+        isAdmin: user.isAdmin || user.role === 'admin'
+      });
+    } catch (error) {
+      console.error('🔥 Auth Me Error:', error);
+      res.status(error.statusCode || 500).json({ message: error.message });
     }
-
-    const user = new User({
-      name,
-      email,
-      password,
-      registrationNumber,
-      phone,
-      stream,
-      section,
-      session
-    });
-
-    await user.save();
-
-    const token = jwt.sign(
-      { userId: user._id, email: user.email, role: user.role, isAdmin: user.isAdmin },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    res.status(201).json({
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role
-      }
-    });
-  },
-
-  'GET /auth/me': async (req, res) => {
-    const user = await authenticate(req);
-    res.status(200).json({
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      isAdmin: user.isAdmin
-    });
   },
 
   // --- EVENT ROUTES ---
 
   'GET /events': async (req, res) => {
-    const events = await Event.find().sort({ date: -1 });
-    res.status(200).json(events);
+    try {
+      const events = await Event.find().sort({ date: -1 });
+      res.status(200).json(events);
+    } catch (error) {
+      console.error('🔥 Fetch Events Error:', error);
+      res.status(500).json({ message: 'Internal Server Error fetching events' });
+    }
   },
 
   'GET /events/:id': async (req, res) => {
-    const { id } = req.params;
-    let event;
-    
-    if (mongoose.Types.ObjectId.isValid(id)) {
-      event = await Event.findById(id);
+    try {
+      const { id } = req.params;
+      let event;
+      
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        event = await Event.findById(id);
+      }
+      
+      if (!event) {
+        event = await Event.findOne({ slug: id });
+      }
+      
+      if (!event) {
+        return res.status(404).json({ message: 'Event not found' });
+      }
+      res.status(200).json(event);
+    } catch (error) {
+      console.error('🔥 Fetch Event Error:', error);
+      res.status(500).json({ message: 'Internal Server Error fetching event' });
     }
-    
-    if (!event) {
-      event = await Event.findOne({ slug: id });
-    }
-    
-    if (!event) {
-      return res.status(404).json({ message: 'Event not found' });
-    }
-    res.status(200).json(event);
   },
 
   'POST /events': async (req, res) => {
@@ -324,10 +362,15 @@ const handlers = {
   },
 
   'DELETE /events/:id': async (req, res) => {
-    await checkAdmin(req);
-    const event = await Event.findByIdAndDelete(req.params.id);
-    if (!event) return res.status(404).json({ message: 'Event not found' });
-    res.status(200).json({ message: 'Event deleted successfully' });
+    try {
+      await checkAdmin(req);
+      const event = await Event.findByIdAndDelete(req.params.id);
+      if (!event) return res.status(404).json({ message: 'Event not found' });
+      res.status(200).json({ message: 'Event deleted successfully' });
+    } catch (error) {
+      console.error('🔥 Delete Event Error:', error);
+      res.status(error.statusCode || 500).json({ message: error.message });
+    }
   },
 
   // CRITICAL: Event Registration Handler (Handles both /api/events/:id/register and /api/register?eventId=...)
@@ -337,58 +380,82 @@ const handlers = {
   'POST /register': handleRegistration,
 
   'GET /events/:id/check-registration': async (req, res) => {
-    const { id: eventId } = req.params;
-    const user = await authenticate(req);
-    
-    let event;
-    if (mongoose.Types.ObjectId.isValid(eventId)) {
-      event = await Event.findById(eventId);
-    } else {
-      event = await Event.findOne({ slug: eventId });
+    try {
+      const { id: eventId } = req.params;
+      const user = await authenticate(req);
+      
+      let event;
+      if (mongoose.Types.ObjectId.isValid(eventId)) {
+        event = await Event.findById(eventId);
+      } else {
+        event = await Event.findOne({ slug: eventId });
+      }
+      
+      if (!event) return res.status(404).json({ message: 'Event not found' });
+
+      const registration = await EventRegistration.findOne({
+        event: event._id,
+        user: user._id
+      });
+
+      res.status(200).json({ isRegistered: !!registration, registration });
+    } catch (error) {
+      // If not authenticated, they can't be "registered" as a user
+      if (error.statusCode === 401) {
+        return res.status(200).json({ isRegistered: false });
+      }
+      console.error('🔥 Check Registration Error:', error);
+      res.status(500).json({ message: 'Internal Server Error' });
     }
-    
-    if (!event) return res.status(404).json({ message: 'Event not found' });
-
-    const registration = await EventRegistration.findOne({
-      event: event._id,
-      user: user._id
-    });
-
-    res.status(200).json({ isRegistered: !!registration, registration });
   },
 
   'GET /events/user/registrations': async (req, res) => {
-    const user = await authenticate(req);
-    const registrations = await EventRegistration.find({ user: user._id })
-      .populate('event')
-      .sort({ registeredAt: -1 });
-    res.status(200).json(registrations);
+    try {
+      const user = await authenticate(req);
+      const registrations = await EventRegistration.find({ user: user._id })
+        .populate('event')
+        .sort({ registeredAt: -1 });
+      res.status(200).json(registrations);
+    } catch (error) {
+      console.error('🔥 User Registrations Error:', error);
+      res.status(error.statusCode || 500).json({ message: error.message });
+    }
   },
 
   'GET /events/:id/registrations': async (req, res) => {
-    await checkAdmin(req);
-    const { id } = req.params;
-    
-    let event;
-    if (mongoose.Types.ObjectId.isValid(id)) {
-      event = await Event.findById(id);
-    } else {
-      event = await Event.findOne({ slug: id });
-    }
-    
-    if (!event) return res.status(404).json({ message: 'Event not found' });
+    try {
+      await checkAdmin(req);
+      const { id } = req.params;
+      
+      let event;
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        event = await Event.findById(id);
+      } else {
+        event = await Event.findOne({ slug: id });
+      }
+      
+      if (!event) return res.status(404).json({ message: 'Event not found' });
 
-    const registrations = await EventRegistration.find({ event: event._id })
-      .populate('user', 'name email registrationNumber')
-      .sort({ registeredAt: -1 });
-    res.status(200).json(registrations);
+      const registrations = await EventRegistration.find({ event: event._id })
+        .populate('user', 'name email registrationNumber')
+        .sort({ registeredAt: -1 });
+      res.status(200).json(registrations);
+    } catch (error) {
+      console.error('🔥 Fetch Event Registrations Error:', error);
+      res.status(error.statusCode || 500).json({ message: error.message });
+    }
   },
 
   // --- MEMBER ROUTES ---
 
   'GET /members': async (req, res) => {
-    const members = await Member.find().sort({ order: 1 });
-    res.status(200).json(members);
+    try {
+      const members = await Member.find().sort({ order: 1 });
+      res.status(200).json(members);
+    } catch (error) {
+      console.error('🔥 Fetch Members Error:', error);
+      res.status(500).json({ message: 'Internal Server Error fetching members' });
+    }
   },
 
   'POST /members': async (req, res) => {
@@ -420,25 +487,36 @@ const handlers = {
   },
 
   'DELETE /members/:id': async (req, res) => {
-    await checkAdmin(req);
-    await Member.findByIdAndDelete(req.params.id);
-    res.status(200).json({ message: 'Member deleted successfully' });
+    try {
+      await checkAdmin(req);
+      const member = await Member.findByIdAndDelete(req.params.id);
+      if (!member) return res.status(404).json({ message: 'Member not found' });
+      res.status(200).json({ message: 'Member deleted successfully' });
+    } catch (error) {
+      console.error('🔥 Delete Member Error:', error);
+      res.status(error.statusCode || 500).json({ message: error.message });
+    }
   },
 
   // --- SUBMISSION ROUTES ---
 
   'POST /submissions': async (req, res) => {
-    const submission = new Submission({
-      ...req.body,
-      status: 'pending',
-      submittedAt: new Date()
-    });
-    await submission.save();
-    res.status(201).json({
-      success: true,
-      message: 'Join request submitted successfully!',
-      submission
-    });
+    try {
+      const submission = new Submission({
+        ...req.body,
+        status: 'pending',
+        submittedAt: new Date()
+      });
+      await submission.save();
+      res.status(201).json({
+        success: true,
+        message: 'Join request submitted successfully!',
+        submission
+      });
+    } catch (error) {
+      console.error('🔥 Submission Error:', error);
+      res.status(500).json({ message: 'Internal Server Error submitting request' });
+    }
   },
 
   'GET /submissions': async (req, res) => {
@@ -453,36 +531,63 @@ const handlers = {
   },
 
   'PUT /submissions/:id': async (req, res) => {
-    await checkAdmin(req);
-    const submission = await Submission.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.status(200).json(submission);
+    try {
+      await checkAdmin(req);
+      const submission = await Submission.findByIdAndUpdate(req.params.id, req.body, { new: true });
+      if (!submission) return res.status(404).json({ message: 'Submission not found' });
+      res.status(200).json(submission);
+    } catch (error) {
+      console.error('🔥 Update Submission Error:', error);
+      res.status(error.statusCode || 500).json({ message: error.message });
+    }
   },
 
   // --- GALLERY ROUTES ---
 
   'GET /gallery': async (req, res) => {
-    const gallery = await Gallery.find().sort({ createdAt: -1 });
-    res.status(200).json(gallery);
+    try {
+      const gallery = await Gallery.find().sort({ createdAt: -1 });
+      res.status(200).json(gallery);
+    } catch (error) {
+      console.error('🔥 Fetch Gallery Error:', error);
+      res.status(500).json({ message: 'Internal Server Error fetching gallery' });
+    }
   },
 
   'POST /gallery': async (req, res) => {
-    await checkAdmin(req);
-    const item = new Gallery(req.body);
-    await item.save();
-    res.status(201).json(item);
+    try {
+      await checkAdmin(req);
+      const item = new Gallery(req.body);
+      await item.save();
+      res.status(201).json(item);
+    } catch (error) {
+      console.error('🔥 Add Gallery Item Error:', error);
+      res.status(error.statusCode || 500).json({ message: error.message });
+    }
   },
 
   'DELETE /gallery/:id': async (req, res) => {
-    await checkAdmin(req);
-    await Gallery.findByIdAndDelete(req.params.id);
-    res.status(200).json({ message: 'Gallery item deleted' });
+    try {
+      await checkAdmin(req);
+      const item = await Gallery.findByIdAndDelete(req.params.id);
+      if (!item) return res.status(404).json({ message: 'Gallery item not found' });
+      res.status(200).json({ message: 'Gallery item deleted' });
+    } catch (error) {
+      console.error('🔥 Delete Gallery Item Error:', error);
+      res.status(error.statusCode || 500).json({ message: error.message });
+    }
   },
 
   // --- TESTIMONIAL ROUTES ---
 
   'GET /testimonials': async (req, res) => {
-    const testimonials = await Testimonial.find({ status: 'approved' }).sort({ createdAt: -1 });
-    res.status(200).json(testimonials);
+    try {
+      const testimonials = await Testimonial.find({ status: 'approved' }).sort({ createdAt: -1 });
+      res.status(200).json(testimonials);
+    } catch (error) {
+      console.error('🔥 Fetch Testimonials Error:', error);
+      res.status(500).json({ message: 'Internal Server Error fetching testimonials' });
+    }
   },
 
   'GET /testimonials/all': async (req, res) => {
@@ -491,27 +596,44 @@ const handlers = {
       const testimonials = await Testimonial.find().sort({ createdAt: -1 });
       res.status(200).json(testimonials);
     } catch (error) {
-      console.error('Error fetching testimonials:', error);
+      console.error('🔥 Fetch All Testimonials Error:', error);
       res.status(error.statusCode || 500).json({ message: error.message });
     }
   },
 
   'POST /testimonials/submit': async (req, res) => {
-    const testimonial = new Testimonial({ ...req.body, status: 'pending' });
-    await testimonial.save();
-    res.status(201).json({ message: 'Testimonial submitted for approval' });
+    try {
+      const testimonial = new Testimonial({ ...req.body, status: 'pending' });
+      await testimonial.save();
+      res.status(201).json({ message: 'Testimonial submitted for approval' });
+    } catch (error) {
+      console.error('🔥 Submit Testimonial Error:', error);
+      res.status(500).json({ message: 'Internal Server Error submitting testimonial' });
+    }
   },
 
   'PUT /testimonials/:id': async (req, res) => {
-    await checkAdmin(req);
-    const testimonial = await Testimonial.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.status(200).json(testimonial);
+    try {
+      await checkAdmin(req);
+      const testimonial = await Testimonial.findByIdAndUpdate(req.params.id, req.body, { new: true });
+      if (!testimonial) return res.status(404).json({ message: 'Testimonial not found' });
+      res.status(200).json(testimonial);
+    } catch (error) {
+      console.error('🔥 Update Testimonial Error:', error);
+      res.status(error.statusCode || 500).json({ message: error.message });
+    }
   },
 
   'DELETE /testimonials/:id': async (req, res) => {
-    await checkAdmin(req);
-    await Testimonial.findByIdAndDelete(req.params.id);
-    res.status(200).json({ message: 'Testimonial deleted' });
+    try {
+      await checkAdmin(req);
+      const testimonial = await Testimonial.findByIdAndDelete(req.params.id);
+      if (!testimonial) return res.status(404).json({ message: 'Testimonial not found' });
+      res.status(200).json({ message: 'Testimonial deleted' });
+    } catch (error) {
+      console.error('🔥 Delete Testimonial Error:', error);
+      res.status(error.statusCode || 500).json({ message: error.message });
+    }
   },
 
   // --- SYSTEM ROUTES ---
