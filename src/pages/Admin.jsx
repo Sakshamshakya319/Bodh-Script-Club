@@ -600,6 +600,7 @@ const Admin = () => {
                 {activeTab === 'submissions' && (
                   <SubmissionsContent
                     submissions={safeSubmissions}
+                    onCreate={() => handleCreate('submission')}
                     onUpdateStatus={handleUpdateSubmissionStatus}
                     onPromote={handlePromoteClick}
                     onExport={handleExportSubmissions}
@@ -668,7 +669,7 @@ const Admin = () => {
 }
 
 // Content Components for each tab
-const SubmissionsContent = ({ submissions, onUpdateStatus, onPromote, onExport, onDelete }) => {
+const SubmissionsContent = ({ submissions, onCreate, onUpdateStatus, onPromote, onExport, onDelete }) => {
   const { theme } = useTheme();
   const [filter, setFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -701,17 +702,30 @@ const SubmissionsContent = ({ submissions, onUpdateStatus, onPromote, onExport, 
           Total Join Requests: <span className={`font-semibold ${theme === 'dark' ? 'text-neon-cyan' : 'text-cyan-700'
             }`}>{submissions.length}</span>
         </p>
-        <button
-          type="button"
-          onClick={onExport}
-          className={`flex items-center gap-2 px-4 py-2 text-white font-body rounded-xl transition-all ${theme === 'dark'
-            ? 'bg-gradient-to-r from-neon-blue to-neon-purple hover:shadow-neon'
-            : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:shadow-lg'
-            }`}
-        >
-          <Download size={18} />
-          Export to Excel
-        </button>
+        <div className="flex gap-4">
+          <button
+            type="button"
+            onClick={onCreate}
+            className={`flex items-center gap-2 px-4 py-2 text-white font-body rounded-xl transition-all ${theme === 'dark'
+              ? 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:shadow-neon'
+              : 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:shadow-lg'
+              }`}
+          >
+            <UserPlus size={18} />
+            Add New Request
+          </button>
+          <button
+            type="button"
+            onClick={onExport}
+            className={`flex items-center gap-2 px-4 py-2 text-white font-body rounded-xl transition-all ${theme === 'dark'
+              ? 'bg-gradient-to-r from-neon-blue to-neon-purple hover:shadow-neon'
+              : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:shadow-lg'
+              }`}
+          >
+            <Download size={18} />
+            Export to Excel
+          </button>
+        </div>
       </div>
 
       {/* Status Filters */}
@@ -2372,6 +2386,13 @@ const CreateModal = ({ type, onClose, onSuccess }) => {
         case 'member':
           await membersAPI.create(dataToSubmit);
           break;
+        case 'submission':
+          await submissionsAPI.create({ ...dataToSubmit, status: 'approved' });
+          break;
+        case 'testimonial':
+          await testimonialsAPI.create(dataToSubmit);
+          break;
+        case 'gallery':
           await galleryAPI.create(dataToSubmit);
           break;
         default:
@@ -2433,7 +2454,8 @@ const CreateModal = ({ type, onClose, onSuccess }) => {
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64String = reader.result;
-        setFormData(prev => ({ ...prev, image: base64String }));
+        const fieldName = type === 'submission' ? 'photo' : 'image';
+        setFormData(prev => ({ ...prev, [fieldName]: base64String }));
         setImagePreview(base64String);
         alert(`Image compressed successfully! Size: ${(compressedFile.size / 1024).toFixed(0)}KB`);
       };
@@ -3069,6 +3091,91 @@ const CreateModal = ({ type, onClose, onSuccess }) => {
                       }`}
                     placeholder="https://linkedin.com/in/username"
                   />
+                </div>
+              </>
+            )}
+
+            {type === 'submission' && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className={`block text-sm font-heading font-semibold mb-2 ${theme === 'dark' ? 'text-neon-blue' : 'text-blue-700'}`}>Full Name *</label>
+                    <input type="text" name="name" value={formData.name || ''} onChange={handleChange} required className={`w-full px-4 py-3 border rounded-lg transition font-body focus:outline-none ${theme === 'dark' ? 'bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 focus:border-neon-cyan' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500'}`} placeholder="Enter full name" />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-heading font-semibold mb-2 ${theme === 'dark' ? 'text-neon-blue' : 'text-blue-700'}`}>Registration Number *</label>
+                    <input type="text" name="registrationNumber" value={formData.registrationNumber || ''} onChange={handleChange} required className={`w-full px-4 py-3 border rounded-lg transition font-body focus:outline-none ${theme === 'dark' ? 'bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 focus:border-neon-cyan' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500'}`} placeholder="e.g. 12345678" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className={`block text-sm font-heading font-semibold mb-2 ${theme === 'dark' ? 'text-neon-blue' : 'text-blue-700'}`}>Email Address *</label>
+                    <input type="email" name="email" value={formData.email || ''} onChange={handleChange} required className={`w-full px-4 py-3 border rounded-lg transition font-body focus:outline-none ${theme === 'dark' ? 'bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 focus:border-neon-cyan' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500'}`} placeholder="email@example.com" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className={`block text-sm font-heading font-semibold mb-2 ${theme === 'dark' ? 'text-neon-blue' : 'text-blue-700'}`}>Phone *</label>
+                      <input type="tel" name="phone" value={formData.phone || ''} onChange={handleChange} required className={`w-full px-4 py-2 border rounded-lg transition font-body focus:outline-none ${theme === 'dark' ? 'bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 focus:border-neon-cyan' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500'}`} placeholder="Phone" />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-heading font-semibold mb-2 ${theme === 'dark' ? 'text-neon-blue' : 'text-blue-700'}`}>WhatsApp *</label>
+                      <input type="tel" name="whatsapp" value={formData.whatsapp || ''} onChange={handleChange} required className={`w-full px-4 py-2 border rounded-lg transition font-body focus:outline-none ${theme === 'dark' ? 'bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 focus:border-neon-cyan' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500'}`} placeholder="WhatsApp" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className={`block text-sm font-heading font-semibold mb-2 ${theme === 'dark' ? 'text-neon-blue' : 'text-blue-700'}`}>Course *</label>
+                    <input type="text" name="course" value={formData.course || ''} onChange={handleChange} required className={`w-full px-4 py-2 border rounded-lg transition font-body focus:outline-none ${theme === 'dark' ? 'bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 focus:border-neon-cyan' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500'}`} placeholder="e.g. MCA" />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-heading font-semibold mb-2 ${theme === 'dark' ? 'text-neon-blue' : 'text-blue-700'}`}>Dept *</label>
+                    <input type="text" name="department" value={formData.department || ''} onChange={handleChange} required className={`w-full px-4 py-2 border rounded-lg transition font-body focus:outline-none ${theme === 'dark' ? 'bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 focus:border-neon-cyan' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500'}`} placeholder="e.g. CS" />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-heading font-semibold mb-2 ${theme === 'dark' ? 'text-neon-blue' : 'text-blue-700'}`}>Section *</label>
+                    <input type="text" name="section" value={formData.section || ''} onChange={handleChange} required className={`w-full px-4 py-2 border rounded-lg transition font-body focus:outline-none ${theme === 'dark' ? 'bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 focus:border-neon-cyan' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500'}`} placeholder="Section" />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-heading font-semibold mb-2 ${theme === 'dark' ? 'text-neon-blue' : 'text-blue-700'}`}>Year *</label>
+                    <select name="year" value={formData.year || ''} onChange={handleChange} required className={`w-full px-4 py-2 border rounded-lg transition font-body focus:outline-none ${theme === 'dark' ? 'bg-gray-900/50 border-gray-700 text-white focus:border-neon-cyan' : 'bg-white border-gray-300 text-gray-900 focus:border-blue-500'}`}>
+                      <option value="">Select</option>
+                      <option value="1st">1st Year</option>
+                      <option value="2nd">2nd Year</option>
+                      <option value="3rd">3rd Year</option>
+                      <option value="4th">4th Year</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className={`block text-sm font-heading font-semibold mb-2 ${theme === 'dark' ? 'text-neon-blue' : 'text-blue-700'}`}>Batch Year *</label>
+                    <input type="text" name="batch" value={formData.batch || ''} onChange={handleChange} required className={`w-full px-4 py-3 border rounded-lg transition font-body focus:outline-none ${theme === 'dark' ? 'bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 focus:border-neon-cyan' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500'}`} placeholder="e.g. 2023-25" />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-heading font-semibold mb-2 ${theme === 'dark' ? 'text-neon-blue' : 'text-blue-700'}`}>GitHub URL</label>
+                    <input type="url" name="github" value={formData.github || ''} onChange={handleChange} className={`w-full px-4 py-3 border rounded-lg transition font-body focus:outline-none ${theme === 'dark' ? 'bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 focus:border-neon-cyan' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500'}`} placeholder="https://github.com/username" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className={`block text-sm font-heading font-semibold mb-2 ${theme === 'dark' ? 'text-neon-blue' : 'text-blue-700'}`}>Student Photo *</label>
+                  <label className={`flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed rounded-lg cursor-pointer transition-all ${theme === 'dark' ? 'bg-neon-cyan/10 border-neon-cyan/30 hover:bg-neon-cyan/20' : 'bg-cyan-50 border-cyan-300 hover:bg-cyan-100'}`}>
+                    <Upload size={20} className={theme === 'dark' ? 'text-neon-cyan' : 'text-cyan-600'} />
+                    <span className={`font-body font-semibold ${theme === 'dark' ? 'text-neon-cyan' : 'text-cyan-700'}`}>
+                      {uploadingImage ? 'Compressing...' : 'Upload Student Photo'}
+                    </span>
+                    <input type="file" accept="image/*" onChange={handleImageUpload} disabled={uploadingImage} className="hidden" required={!imagePreview} />
+                  </label>
+                  {imagePreview && (
+                    <div className="mt-3 relative">
+                      <img src={imagePreview} alt="Preview" className={`w-full h-32 object-contain rounded-lg border ${theme === 'dark' ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-300'}`} />
+                      <button type="button" onClick={() => { setFormData(prev => ({ ...prev, photo: '' })); setImagePreview(''); }} className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"><X size={14} /></button>
+                    </div>
+                  )}
                 </div>
               </>
             )}

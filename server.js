@@ -121,9 +121,9 @@ if (process.env.NODE_ENV !== 'production') {
       await paymentHistoryHandler(req, res);
     } catch (error) {
       console.error('[Payment History API] Error:', error);
-      res.status(500).json({ 
-        message: 'Payment history API handler error', 
-        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal Server Error' 
+      res.status(500).json({
+        message: 'Payment history API handler error',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal Server Error'
       });
     }
   });
@@ -135,9 +135,9 @@ if (process.env.NODE_ENV !== 'production') {
       await paymentHandler(req, res);
     } catch (error) {
       console.error('[Payment API] Error:', error);
-      res.status(500).json({ 
-        message: 'Payment API handler error', 
-        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal Server Error' 
+      res.status(500).json({
+        message: 'Payment API handler error',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal Server Error'
       });
     }
   });
@@ -149,16 +149,16 @@ if (process.env.NODE_ENV !== 'production') {
       await apiHandler(req, res);
     } catch (error) {
       console.error('[API] Error:', error);
-      res.status(500).json({ 
-        message: 'API handler error', 
-        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal Server Error' 
+      res.status(500).json({
+        message: 'API handler error',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal Server Error'
       });
     }
   });
 } else {
   // In production, Vercel handles API routes via serverless functions
   app.get('/api/*', (req, res) => {
-    res.status(404).json({ 
+    res.status(404).json({
       message: 'API routes are handled by Vercel serverless functions in production',
       path: req.path
     });
@@ -167,7 +167,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Simple test endpoint that doesn't require environment variables
 app.get('/api/ping', (req, res) => {
-  res.json({ 
+  res.json({
     message: 'Server is running',
     timestamp: new Date().toISOString(),
     nodeVersion: process.version
@@ -182,7 +182,7 @@ app.get('/api/env-check', (req, res) => {
     nodeVersion: process.version,
     platform: process.platform,
     environment: process.env.NODE_ENV || 'not set',
-    
+
     // Check critical environment variables (without exposing values)
     envVars: {
       MONGODB_URI: process.env.MONGODB_URI ? 'SET' : 'NOT SET',
@@ -192,7 +192,7 @@ app.get('/api/env-check', (req, res) => {
       PORT: process.env.PORT || 'not set',
       BCRYPT_ROUNDS: process.env.BCRYPT_ROUNDS || 'not set'
     },
-    
+
     // Show any missing critical variables
     missingCritical: requiredEnvVars.filter(varName => !process.env[varName])
   };
@@ -211,7 +211,7 @@ app.get('/api/env-check', (req, res) => {
 
 // Legacy health check endpoints (for backward compatibility)
 app.get('/api/test', (req, res) => {
-  res.json({ 
+  res.json({
     message: 'API is working!',
     environment: process.env.NODE_ENV,
     mongodb: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
@@ -249,7 +249,7 @@ app.get('/api/debug', (req, res) => {
 // Serve static files from the React app in production
 if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
   app.use(express.static(path.join(__dirname, 'dist')));
-  
+
   // Handle React routing - return all requests to React app
   app.get('*', (req, res) => {
     // Don't serve index.html for API routes
@@ -280,7 +280,7 @@ const connectDB = async () => {
     const db = await mongoose.connect(process.env.MONGODB_URI, {
       serverSelectionTimeoutMS: 10000,
       maxPoolSize: 10,
-      bufferCommands: false,
+      bufferCommands: true,
       // Removed bufferMaxEntries as it's deprecated
     });
 
@@ -311,9 +311,9 @@ app.use(async (req, res, next) => {
         await connectDB();
       } catch (error) {
         console.error("Failed to connect to database during request");
-        return res.status(500).json({ 
-          message: 'Database connection failed', 
-          error: process.env.NODE_ENV === 'development' ? error.message : 'Internal Server Error' 
+        return res.status(500).json({
+          message: 'Database connection failed',
+          error: process.env.NODE_ENV === 'development' ? error.message : 'Internal Server Error'
         });
       }
     }

@@ -8,6 +8,7 @@ import { gsapAnimations } from './utils/gsap';
 import Navbar from './components/Navbar';
 import CursorFollower from './components/CursorFollower';
 import LoadingScreen from './components/LoadingScreen';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 
 // Pages
 import Home from './pages/Home';
@@ -33,18 +34,18 @@ function App() {
       try {
         // Simulate loading time for better UX
         await new Promise(resolve => setTimeout(resolve, 2000));
-        
+
         // Initialize GSAP animations
         gsapAnimations.initAll();
-        
+
         setIsLoading(false);
-        
+
         // Page load animation after loading screen disappears
         setTimeout(() => {
           gsapAnimations.pageLoadAnimation();
           setIsInitialized(true);
         }, 500);
-        
+
       } catch (error) {
         console.error('Error initializing app:', error);
         setIsLoading(false);
@@ -102,16 +103,16 @@ function App() {
     <AuthProvider>
       <Router>
         {/* Loading Screen */}
-        <LoadingScreen 
-          isLoading={isLoading} 
+        <LoadingScreen
+          isLoading={isLoading}
           onComplete={() => setIsInitialized(true)}
         />
 
         {/* Cursor Glow - position follows mouse so color moves with cursor */}
-        <div 
-          ref={cursorRef} 
+        <div
+          ref={cursorRef}
           className="cursor-glow fixed w-[400px] h-[400px] pointer-events-none z-[99998] rounded-full mix-blend-screen filter blur-[50px] opacity-60 transition-opacity duration-300"
-          style={{ 
+          style={{
             background: 'radial-gradient(circle, rgba(0, 240, 255, 0.5) 0%, rgba(0, 240, 255, 0.3) 30%, rgba(176, 0, 255, 0.2) 50%, rgba(255, 0, 255, 0.1) 70%, transparent 85%)',
             pointerEvents: 'none',
             ...glowStyle
@@ -120,6 +121,9 @@ function App() {
 
         {/* Precision Cursor Follower */}
         {isInitialized && <CursorFollower />}
+
+        {/* PWA Install Prompt */}
+        <PWAInstallPrompt />
 
         {/* Main App Content */}
         {isInitialized && (
