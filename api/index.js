@@ -17,13 +17,29 @@ function setCORS(res) {
 }
 
 async function getAuthUser(req) {
-  const auth = req.headers.authorization;
-  if (!auth?.startsWith('Bearer ')) throw { code: 401, msg: 'No token' };
+  const auth = req.headers.authorization || req.headers.Authorization;
+  console.log('Auth Header:', auth ? 'Present' : 'Missing');
+
+  if (!auth?.startsWith('Bearer ')) {
+    console.log('Auth error: No Bearer token');
+    throw { code: 401, msg: 'No token' };
+  }
+
   const token = auth.split(' ')[1];
-  const decoded = jwt.verify(token, process.env.JWT_SECRET);
-  const user = await User.findById(decoded.userId || decoded.id);
-  if (!user) throw { code: 401, msg: 'User not found' };
-  return user;
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log('Token decoded:', { userId: decoded.userId });
+
+    const user = await User.findById(decoded.userId || decoded.id);
+    if (!user) {
+      console.log('Auth error: User not found for ID', decoded.userId);
+      throw { code: 401, msg: 'User not found' };
+    }
+    return user;
+  } catch (error) {
+    console.error('JWT Verify Error:', error.message);
+    throw { code: 401, msg: 'Invalid token' };
+  }
 }
 
 async function requireAdmin(req) {
@@ -38,24 +54,24 @@ export default async function handler(req, res) {
 
   try {
     await connectDB();
-    
+
     const url = new URL(req.url, `http://${req.headers.host}`);
     let path = url.pathname.replace('/api', '') || '/';
     const method = req.method;
     const body = req.body || {};
-    
+
     console.log(`[${method}] ${path}`);
 
     // AUTH
     if (method === 'POST' && path === '/auth/login') {
       const { email, password } = body;
       if (!email || !password) return res.status(400).json({ message: 'Email and password required' });
-      
+
       const user = await User.findOne({ email }).select('+password');
       if (!user || !(await user.comparePassword(password))) {
         return res.status(401).json({ message: 'Invalid credentials' });
       }
-      
+
       const token = jwt.sign({ userId: user._id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
       return res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role, isAdmin: user.isAdmin || user.role === 'admin' } });
     }
@@ -63,10 +79,10 @@ export default async function handler(req, res) {
     if (method === 'POST' && path === '/auth/signup') {
       const { name, email, password, registrationNumber, phone, stream, section, session } = body;
       if (await User.findOne({ email })) return res.status(400).json({ message: 'Email exists' });
-      
+
       const user = new User({ name, email, password, registrationNumber, phone, stream, section, session });
       await user.save();
-      
+
       const token = jwt.sign({ userId: user._id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
       return res.status(201).json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role, isAdmin: user.isAdmin } });
     }
@@ -131,7 +147,7 @@ export default async function handler(req, res) {
         if (await EventRegistration.findOne({ event: event._id, user: user._id })) {
           return res.status(400).json({ message: 'You have already registered for this event', error: 'DUPLICATE_REGISTRATION' });
         }
-      } catch (e) {}
+      } catch (e) { }
 
       const reg = new EventRegistration({
         event: event._id,
@@ -161,7 +177,7 @@ export default async function handler(req, res) {
       const eventId = path.split('/')[2];
       let event = mongoose.Types.ObjectId.isValid(eventId) ? await Event.findById(eventId) : await Event.findOne({ slug: eventId });
       if (!event) return res.status(404).json({ message: 'Event not found' });
-      
+
       const regs = await EventRegistration.find({ event: event._id }).populate('user', 'name email').sort({ registeredAt: -1 });
       return res.json(regs);
     }
@@ -172,7 +188,7 @@ export default async function handler(req, res) {
         const user = await getAuthUser(req);
         let event = mongoose.Types.ObjectId.isValid(eventId) ? await Event.findById(eventId) : await Event.findOne({ slug: eventId });
         if (!event) return res.status(404).json({ message: 'Event not found' });
-        
+
         const reg = await EventRegistration.findOne({ event: event._id, user: user._id });
         return res.json({ isRegistered: !!reg, registration: reg });
       } catch (e) {
@@ -216,9 +232,53 @@ export default async function handler(req, res) {
 
     // SUBMISSIONS
     if (method === 'POST' && path === '/submissions') {
-      const sub = new Submission({ ...body, status: 'pending', submittedAt: new Date() });
-      await sub.save();
-      return res.status(201).json({ success: true, message: 'Join request submitted!', submission: sub });
+      try {
+        // Check for existing registration number
+        const existingReg = await Submission.findOne({ registrationNumber: body.registrationNumber });
+        if (existingReg) {
+          return res.status(400).json({
+            error: 'DUPLICATE_REGISTRATION',
+            message: `Registration number ${body.registrationNumber} is already registered.`,
+            existingSubmission: {
+              registrationNumber: existingReg.registrationNumber,
+              name: existingReg.name,
+              email: existingReg.email,
+              status: existingReg.status,
+              submittedAt: existingReg.submittedAt
+            }
+          });
+        }
+
+        // Check for existing email
+        const existingEmail = await Submission.findOne({ email: body.email });
+        if (existingEmail) {
+          return res.status(400).json({
+            error: 'DUPLICATE_EMAIL',
+            message: `Email ${body.email} is already registered.`,
+            existingSubmission: {
+              registrationNumber: existingEmail.registrationNumber,
+              name: existingEmail.name,
+              email: existingEmail.email,
+              status: existingEmail.status,
+              submittedAt: existingEmail.submittedAt
+            }
+          });
+        }
+
+        const sub = new Submission({
+          ...body,
+          status: body.status || 'pending',
+          submittedAt: new Date()
+        });
+        await sub.save();
+        return res.status(201).json({ success: true, message: 'Join request submitted!', submission: sub });
+      } catch (error) {
+        console.error('Submission creation error:', error);
+        return res.status(500).json({
+          message: 'Failed to submit join request',
+          error: error.message
+        });
+      }
     }
 
     if (method === 'GET' && path === '/submissions') {
@@ -233,6 +293,14 @@ export default async function handler(req, res) {
       const sub = await Submission.findByIdAndUpdate(id, body, { new: true });
       if (!sub) return res.status(404).json({ message: 'Not found' });
       return res.json(sub);
+    }
+
+    if (method === 'DELETE' && path.startsWith('/submissions/')) {
+      await requireAdmin(req);
+      const id = path.split('/')[2];
+      const sub = await Submission.findByIdAndDelete(id);
+      if (!sub) return res.status(404).json({ message: 'Submission not found' });
+      return res.json({ message: 'Submission deleted successfully', submission: sub });
     }
 
     // GALLERY
@@ -326,6 +394,12 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('[API Error]', error);
+
+    // Handle JWT errors specifically
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, message: 'Invalid or expired token' });
+    }
+
     const code = error.code || error.statusCode || 500;
     const message = error.msg || error.message || 'Server error';
     return res.status(code).json({ success: false, message });

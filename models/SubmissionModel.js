@@ -7,11 +7,13 @@ const submissionSchema = new mongoose.Schema({
   phone: String,
   whatsapp: String,
   course: String,
+  department: String,
   section: String,
   year: String,
   batch: String,
   github: String,
   status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+  photo: { type: String }, // Base64 encoded image
   submittedAt: { type: Date, default: Date.now },
   createdAt: { type: Date, default: Date.now }
 });
