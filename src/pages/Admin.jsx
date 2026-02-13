@@ -228,6 +228,31 @@ const Admin = () => {
     }
   };
 
+  const handleUpdateMemberStatus = async (id, status) => {
+    try {
+      await membersAPI.update(id, { status });
+      await handleRefresh();
+      Swal.fire({
+        title: 'Updated!',
+        text: `Member request ${status} successfully!`,
+        icon: 'success',
+        timer: 1500,
+        showConfirmButton: false,
+        background: theme === 'dark' ? '#111827' : '#ffffff',
+        color: theme === 'dark' ? '#ffffff' : '#000000'
+      });
+    } catch (error) {
+      console.error('Error updating member status:', error);
+      Swal.fire({
+        title: 'Error!',
+        text: 'Failed to update member status',
+        icon: 'error',
+        background: theme === 'dark' ? '#111827' : '#ffffff',
+        color: theme === 'dark' ? '#ffffff' : '#000000'
+      });
+    }
+  };
+
   const handleDeleteTestimonial = async (id, name) => {
     const result = await Swal.fire({
       title: 'Are you sure?',
@@ -628,6 +653,7 @@ const Admin = () => {
                     onCreate={() => handleCreate('member')}
                     onEdit={(item) => handleEdit(item, 'member')}
                     onDelete={(id, name) => handleDelete(id, 'member', name)}
+                    onUpdateStatus={handleUpdateMemberStatus}
                   />
                 )}
                 {activeTab === 'students' && (
@@ -1994,8 +2020,15 @@ const TestimonialsContent = ({ testimonials, onUpdateStatus, onDelete }) => {
   );
 };
 
-const MembersContent = ({ members, onCreate, onEdit, onDelete }) => {
+const MembersContent = ({ members, onCreate, onEdit, onDelete, onUpdateStatus }) => {
   const { theme } = useTheme();
+
+  // Sort members: pending first, then by order
+  const sortedMembers = [...members].sort((a, b) => {
+    if (a.status === 'pending' && b.status !== 'pending') return -1;
+    if (a.status !== 'pending' && b.status === 'pending') return 1;
+    return (a.order || 0) - (b.order || 0);
+  });
 
   const getRoleIcon = (role) => {
     const roleColors = {
@@ -2026,6 +2059,11 @@ const MembersContent = ({ members, onCreate, onEdit, onDelete }) => {
           </h2>
           <p className={`font-body text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
             Total Members: <span className={`font-semibold ${theme === 'dark' ? 'text-neon-cyan' : 'text-cyan-700'}`}>{members.length}</span>
+            {members.filter(m => m.status === 'pending').length > 0 && (
+              <span className="ml-2 px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-500 text-xs font-bold border border-yellow-500/30">
+                {members.filter(m => m.status === 'pending').length} Pending Requests
+              </span>
+            )}
           </p>
         </div>
         <button
@@ -2043,11 +2081,24 @@ const MembersContent = ({ members, onCreate, onEdit, onDelete }) => {
 
       {members.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {members.map((member) => (
-            <div key={member._id} className={`rounded-2xl p-6 border transition-all hover:scale-105 transform duration-300 ${theme === 'dark'
+          {sortedMembers.map((member) => (
+            <div key={member._id} className={`rounded-2xl p-6 border transition-all hover:scale-105 transform duration-300 relative ${theme === 'dark'
               ? 'glass-effect border-gray-800 hover:border-neon-cyan/50'
               : 'bg-white border-gray-200 shadow-md hover:shadow-xl hover:border-cyan-400'
               }`}>
+              {/* Status Badge */}
+              <div className="absolute top-4 right-4 z-10">
+                {member.status === 'pending' ? (
+                  <span className="px-2 py-1 rounded-md bg-yellow-500 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-lg animate-pulse">
+                    <Clock size={10} /> Pending
+                  </span>
+                ) : member.status === 'rejected' ? (
+                  <span className="px-2 py-1 rounded-md bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider shadow-lg">
+                    Rejected
+                  </span>
+                ) : null}
+              </div>
+
               {/* Photo */}
               <div className="text-center mb-4">
                 {member.image ? (
@@ -2139,29 +2190,55 @@ const MembersContent = ({ members, onCreate, onEdit, onDelete }) => {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => onEdit(member)}
-                  className={`flex-1 px-3 py-2 border rounded-lg text-sm font-body transition-all flex items-center justify-center gap-1 ${theme === 'dark'
-                    ? 'bg-neon-cyan/10 text-neon-cyan border-neon-cyan/30 hover:bg-neon-cyan/20'
-                    : 'bg-cyan-50 text-cyan-700 border-cyan-300 hover:bg-cyan-100'
-                    }`}
-                >
-                  <Eye size={14} />
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDelete(member._id, member.name)}
-                  className={`flex-1 px-3 py-2 border rounded-lg text-sm font-body transition-all flex items-center justify-center gap-1 ${theme === 'dark'
-                    ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20'
-                    : 'bg-red-50 text-red-700 border-red-300 hover:bg-red-100'
-                    }`}
-                >
-                  <Trash2 size={14} />
-                  Delete
-                </button>
+              <div className="space-y-2">
+                {member.status === 'pending' && (
+                  <div className="flex gap-2 mb-2">
+                    <button
+                      onClick={() => onUpdateStatus(member._id, 'approved')}
+                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 bg-green-500/20 text-green-500 border border-green-500/30 hover:bg-green-500/40`}
+                    >
+                      <CheckCircle size={14} /> Accept
+                    </button>
+                    <button
+                      onClick={() => onUpdateStatus(member._id, 'rejected')}
+                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 bg-red-500/20 text-red-500 border border-red-500/30 hover:bg-red-500/40`}
+                    >
+                      <XCircle size={14} /> Reject
+                    </button>
+                  </div>
+                )}
+                {member.status === 'rejected' && (
+                  <button
+                    onClick={() => onUpdateStatus(member._id, 'approved')}
+                    className={`w-full py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 bg-blue-500/20 text-blue-500 border border-blue-500/30 hover:bg-blue-500/40 mb-2`}
+                  >
+                    <RefreshCw size={14} /> Restore to Approved
+                  </button>
+                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onEdit(member)}
+                    className={`flex-1 px-3 py-2 border rounded-lg text-sm font-body transition-all flex items-center justify-center gap-1 ${theme === 'dark'
+                      ? 'bg-neon-cyan/10 text-neon-cyan border-neon-cyan/30 hover:bg-neon-cyan/20'
+                      : 'bg-cyan-50 text-cyan-700 border-cyan-300 hover:bg-cyan-100'
+                      }`}
+                  >
+                    <Eye size={14} />
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDelete(member._id, member.name)}
+                    className={`flex-1 px-3 py-2 border rounded-lg text-sm font-body transition-all flex items-center justify-center gap-1 ${theme === 'dark'
+                      ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20'
+                      : 'bg-red-50 text-red-700 border-red-300 hover:bg-red-100'
+                      }`}
+                  >
+                    <Trash2 size={14} />
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           ))}

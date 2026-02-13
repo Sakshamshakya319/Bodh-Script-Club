@@ -29,7 +29,12 @@ const Members = () => {
     try {
       const { data } = await membersAPI.getAll();
       const list = Array.isArray(data) ? data : (data?.data ?? data?.members ?? []);
-      setMembers(list.length > 0 ? list : demoMembers);
+      
+      // Only show approved members on the public page
+      // We also include members without a status field (legacy data)
+      const approvedMembers = list.filter(m => m.status === 'approved' || !m.status);
+      
+      setMembers(approvedMembers.length > 0 ? approvedMembers : demoMembers);
     } catch (error) {
       console.error('Error fetching members:', error);
       setMembers(demoMembers);
@@ -45,6 +50,7 @@ const Members = () => {
     { id: 'event-coordinator', label: 'Event Coordinators' },
     { id: 'developer', label: 'Developers', roles: ['technical-lead', 'developer'] },
     { id: 'creative', label: 'Creative Team', roles: ['designer', 'content-writer', 'social-media-manager'] },
+    { id: 'other', label: 'Team Members', roles: ['other'] },
   ];
 
   const getRoleDisplay = (role) => {
@@ -203,6 +209,7 @@ const Members = () => {
     coordinators: filteredMembers.filter(m => m.role === 'event-coordinator'),
     technical: filteredMembers.filter(m => ['technical-lead', 'developer'].includes(m.role)),
     creative: filteredMembers.filter(m => ['designer', 'content-writer', 'social-media-manager'].includes(m.role)),
+    others: filteredMembers.filter(m => m.role === 'other' || !m.role),
   };
 
   if (loading) {
@@ -351,6 +358,22 @@ const Members = () => {
                   </h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                     {groupedMembers.creative.map((member) => (
+                      <MemberCard key={member._id} member={member} getRoleDisplay={getRoleDisplay} theme={theme} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Other Members */}
+              {groupedMembers.others.length > 0 && (
+                <div>
+                  <h2 className={`text-4xl font-heading font-bold mb-8 text-center ${
+                    theme === 'dark' ? 'gradient-text' : 'text-gray-900'
+                  }`}>
+                    Team Members
+                  </h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                    {groupedMembers.others.map((member) => (
                       <MemberCard key={member._id} member={member} getRoleDisplay={getRoleDisplay} theme={theme} />
                     ))}
                   </div>

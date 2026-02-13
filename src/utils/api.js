@@ -144,6 +144,7 @@ export const eventsAPI = {
 export const membersAPI = {
   getAll: () => api.get('/members'),
   create: (data) => api.post('/members', data),
+  request: (data) => api.post('/members/request', data),
   update: (id, data) => api.put(`/members/${id}`, data),
   delete: (id) => api.delete(`/members/${id}`),
 };

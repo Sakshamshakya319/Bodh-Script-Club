@@ -1,4 +1,4 @@
-﻿import connectDB from '../lib/db.js';
+import connectDB from '../lib/db.js';
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import User from '../models/UserModel.js';
@@ -206,6 +206,23 @@ export default async function handler(req, res) {
     if (method === 'GET' && path === '/members') {
       const members = await Member.find().sort({ order: 1 });
       return res.json(members);
+    }
+
+    if (method === 'POST' && path === '/members/request') {
+      // Public endpoint for member requests
+      // We save it to Member model but with a default role
+      // Admin can then change the role or delete it
+      const memberData = {
+        ...body,
+        role: 'other', // Default role for requests
+        status: 'pending', // Member requests start as pending
+        order: 99, // Default order
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      const member = new Member(memberData);
+      await member.save();
+      return res.status(201).json(member);
     }
 
     if (method === 'POST' && path === '/members') {

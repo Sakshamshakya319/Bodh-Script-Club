@@ -17,6 +17,7 @@ import Events from './pages/Events';
 import EventDetail from './pages/EventDetail';
 import Members from './pages/Members';
 import Feedback from './pages/Feedback';
+import MembersRequest from './pages/MembersRequest';
 import JoinUs from './pages/JoinUs';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -138,6 +139,7 @@ function App() {
                 <Route path="/events" element={<Events />} />
                 <Route path="/events/:id" element={<EventDetail />} />
                 <Route path="/members" element={<Members />} />
+                <Route path="/membersrequest" element={<MembersRequest />} />
                 <Route path="/feedback" element={<Feedback />} />
                 <Route path="/join" element={<JoinUs />} />
                 <Route path="/login" element={<Login />} />
