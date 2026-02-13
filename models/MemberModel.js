@@ -14,11 +14,6 @@ const memberSchema = new mongoose.Schema({
   github: String,
   linkedin: String,
   twitter: String,
-  status: { 
-    type: String, 
-    enum: ['pending', 'approved', 'rejected'], 
-    default: 'approved' 
-  },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
