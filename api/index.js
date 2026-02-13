@@ -1,4 +1,4 @@
-import connectDB from '../lib/db.js';
+﻿import connectDB from '../lib/db.js';
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import User from '../models/UserModel.js';
@@ -208,23 +208,6 @@ export default async function handler(req, res) {
       return res.json(members);
     }
 
-    if (method === 'POST' && path === '/members/request') {
-      // Public endpoint for member requests
-      // We save it to Member model but with a default role
-      // Admin can then change the role or delete it
-      const memberData = {
-        ...body,
-        role: 'other', // Default role for requests
-        status: 'pending', // Member requests start as pending
-        order: 99, // Default order
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-      const member = new Member(memberData);
-      await member.save();
-      return res.status(201).json(member);
-    }
-
     if (method === 'POST' && path === '/members') {
       await requireAdmin(req);
       const member = new Member(body);
@@ -417,8 +400,20 @@ export default async function handler(req, res) {
       return res.status(401).json({ success: false, message: 'Invalid or expired token' });
     }
 
-    const code = error.code || error.statusCode || 500;
+    // Handle MongoDB errors
+    if (error.code === 11000) {
+      // Duplicate key error
+      return res.status(400).json({
+        success: false,
+        message: 'Duplicate entry. This record already exists.',
+        error: 'DUPLICATE_KEY'
+      });
+    }
+
+    // Use statusCode if available, otherwise default to 500
+    // Never use error.code as HTTP status (it could be a MongoDB error code)
+    const statusCode = error.statusCode || (error.code && error.code >= 100 && error.code < 600 ? error.code : 500);
     const message = error.msg || error.message || 'Server error';
-    return res.status(code).json({ success: false, message });
+    return res.status(statusCode).json({ success: false, message });
   }
 }

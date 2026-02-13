@@ -6,7 +6,6 @@ import { gsapAnimations } from './utils/gsap';
 
 // Components
 import Navbar from './components/Navbar';
-import CursorFollower from './components/CursorFollower';
 import LoadingScreen from './components/LoadingScreen';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 
@@ -17,17 +16,14 @@ import Events from './pages/Events';
 import EventDetail from './pages/EventDetail';
 import Members from './pages/Members';
 import Feedback from './pages/Feedback';
-import MembersRequest from './pages/MembersRequest';
 import JoinUs from './pages/JoinUs';
 import Login from './pages/Login';
-import Signup from './pages/Signup';
 import MyRegistrations from './pages/MyRegistrations';
 import Admin from './pages/Admin';
 
 function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
-  const cursorRef = useRef(null);
 
   useEffect(() => {
     // Initialize app with loading sequence
@@ -62,34 +58,7 @@ function App() {
     };
   }, []);
 
-  // Cursor glow position - state so the colored glow follows the mouse
-  const [glowPos, setGlowPos] = useState({ x: 0, y: 0 });
-  const glowPosRef = useRef({ x: 0, y: 0 });
-  const glowRafRef = useRef(null);
 
-  useEffect(() => {
-    const updateGlowPosition = (e) => {
-      glowPosRef.current = { x: e.clientX, y: e.clientY };
-      if (glowRafRef.current == null) {
-        glowRafRef.current = requestAnimationFrame(() => {
-          setGlowPos({ x: glowPosRef.current.x, y: glowPosRef.current.y });
-          glowRafRef.current = null;
-        });
-      }
-    };
-
-    window.addEventListener('mousemove', updateGlowPosition);
-    return () => {
-      window.removeEventListener('mousemove', updateGlowPosition);
-      if (glowRafRef.current != null) cancelAnimationFrame(glowRafRef.current);
-    };
-  }, [isInitialized]);
-
-  const glowStyle = {
-    left: glowPos.x,
-    top: glowPos.y,
-    transform: 'translate(-50%, -50%)',
-  };
 
   // Refresh GSAP animations when route changes
   useEffect(() => {
@@ -109,19 +78,7 @@ function App() {
           onComplete={() => setIsInitialized(true)}
         />
 
-        {/* Cursor Glow - position follows mouse so color moves with cursor */}
-        <div
-          ref={cursorRef}
-          className="cursor-glow fixed w-[400px] h-[400px] pointer-events-none z-[99998] rounded-full mix-blend-screen filter blur-[50px] opacity-60 transition-opacity duration-300"
-          style={{
-            background: 'radial-gradient(circle, rgba(0, 240, 255, 0.5) 0%, rgba(0, 240, 255, 0.3) 30%, rgba(176, 0, 255, 0.2) 50%, rgba(255, 0, 255, 0.1) 70%, transparent 85%)',
-            pointerEvents: 'none',
-            ...glowStyle
-          }}
-        />
 
-        {/* Precision Cursor Follower */}
-        {isInitialized && <CursorFollower />}
 
         {/* PWA Install Prompt */}
         <PWAInstallPrompt />
@@ -139,11 +96,10 @@ function App() {
                 <Route path="/events" element={<Events />} />
                 <Route path="/events/:id" element={<EventDetail />} />
                 <Route path="/members" element={<Members />} />
-                <Route path="/membersrequest" element={<MembersRequest />} />
                 <Route path="/feedback" element={<Feedback />} />
                 <Route path="/join" element={<JoinUs />} />
                 <Route path="/login" element={<Login />} />
-                <Route path="/signup" element={<Signup />} />
+
                 <Route path="/my-registrations" element={<MyRegistrations />} />
                 <Route path="/admin" element={<Admin />} />
                 <Route path="/admin/*" element={<Admin />} />
